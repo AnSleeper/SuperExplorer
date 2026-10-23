@@ -101,3 +101,7 @@ dotnet publish -c Release
 
 - **0.1.1** 修复单文件发布下退出 / 关机时偶发的 `System.Diagnostics.Tracing` FileNotFoundException（启动时预加载程序集）
 - **0.1.0** 首个成品版本：多面板工作区、拖拽整理、50 步撤销、缩略图浏览、6 主题
+
+## 许可证
+
+[MIT](LICENSE)
