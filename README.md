@@ -95,6 +95,13 @@ dotnet publish -c Release
 
 产出在 `bin/Release/net8.0-windows/win-x64/publish/`，可直接拷贝运行。设置保存在 exe 旁的 `data/settings.json`，日志在 `logs/`。
 
+## 发布新版本（维护者）
+
+1. 更新代码与 README 更新记录，bump `SuperExplorer.csproj` 的 `<Version>`，提交推送
+2. 运行 `powershell -ExecutionPolicy Bypass -File tools\release.ps1`
+
+脚本会自动编译、打 zip、创建（或更新）GitHub Release 并上传附件，发布说明从 git 提交记录自动生成。
+
 ## 图标
 
 `src/SuperExplorer/app.ico` 已随源码附带。若需重新生成，把图标原图放到 `封面素材/超级资源管理器程序图标.jpg`（素材不入库，需自备），运行 `tools/make_icon.ps1`。
