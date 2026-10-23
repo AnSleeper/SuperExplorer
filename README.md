@@ -2,6 +2,8 @@
 
 为「看图、找图、整理素材」而生的 Windows 多面板资源管理器。当前阶段专注把"查看 + 最小必要操作"做到极致，长期目标是**彻底替代 Windows 资源管理器**，成为日常唯一使用的资源管理器。
 
+> **⬇ 直接下载**：[Releases 页面](https://github.com/AnSleeper/SuperExplorer/releases) → 下载 `SuperExplorer-v0.1.1-win-x64.zip`，解压双击 exe 即用，免安装、免依赖（自带 .NET 运行时）。
+
 ## 为什么做这个软件
 
 如果你有大量图片、GIF、视频素材散落在层层嵌套的目录里（比如 AI 绘图产出），用系统资源管理器整理会遇到几个烦：
