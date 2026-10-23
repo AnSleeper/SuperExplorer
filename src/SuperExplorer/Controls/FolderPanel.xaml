@@ -1,0 +1,61 @@
+<UserControl x:Class="SuperExplorer.Controls.FolderPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:SuperExplorer.Controls"
+             Background="Transparent">
+  <Border x:Name="Shell" Background="{DynamicResource PanelBrush}"
+          BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+          CornerRadius="10" ClipToBounds="True" AllowDrop="True"
+          DragOver="Shell_DragOver" DragLeave="Shell_DragLeave" Drop="Shell_Drop"
+          PreviewMouseDown="Shell_PreviewMouseDown">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <Border x:Name="HeaderBorder" Grid.Row="0" Background="Transparent"
+              BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+              Padding="8,7" Cursor="Hand"
+              MouseLeftButtonDown="Header_MouseLeftButtonDown"
+              MouseMove="Header_MouseMove">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+
+          <StackPanel Grid.Column="0" VerticalAlignment="Center">
+            <ScrollViewer HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Disabled" Focusable="False">
+              <StackPanel x:Name="CrumbHost" Orientation="Horizontal"/>
+            </ScrollViewer>
+            <TextBlock x:Name="MetaText" FontSize="{DynamicResource FontSm}" Margin="3,2,0,0"
+                       Foreground="{DynamicResource DimBrush}"
+                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+          </StackPanel>
+
+          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+            <Button x:Name="FavBtn" Content="☆" Style="{StaticResource IconButton}"
+                    Width="28" Height="28" FontSize="16" ToolTip="收藏为常用文件夹"/>
+            <Button x:Name="ExplorerBtn" Content="↗" Style="{StaticResource IconButton}"
+                    Width="28" Height="28" FontSize="16" ToolTip="在资源管理器中打开"/>
+            <Button x:Name="CloseBtn" Content="✕" Style="{StaticResource IconButton}"
+                    Width="28" Height="28" FontSize="16" ToolTip="关闭面板"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <controls:FileGrid x:Name="Grid" Grid.Row="1" Margin="10"/>
+
+      <Border x:Name="DropOverlay" Grid.RowSpan="2" Visibility="Collapsed"
+              IsHitTestVisible="False" CornerRadius="9" Margin="1"
+              Background="{DynamicResource AccentSoftBrush}"
+              BorderBrush="{DynamicResource AccentBrush}" BorderThickness="2"/>
+
+      <Border x:Name="InsertMark" Width="3" Visibility="Collapsed"
+              HorizontalAlignment="Left" Margin="1,6,0,6" CornerRadius="2"
+              Background="{DynamicResource AccentBrush}" IsHitTestVisible="False"/>
+    </Grid>
+  </Border>
+</UserControl>

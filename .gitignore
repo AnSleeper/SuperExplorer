@@ -1,0 +1,19 @@
+# 构建产物
+[Bb]in/
+[Oo]bj/
+
+# 发布输出与运行数据（设置、日志在 exe 旁，属于本机数据）
+dist/
+
+# 本地 SDK / 包缓存 / 构建临时目录（重定向到项目内时产生）
+.dotnet/
+.nuget/
+.temp/
+
+# 图标原始素材与生成物（不入库；生成方式见 tools/make_icon.ps1）
+封面素材/
+/app.ico
+
+# IDE
+.vs/
+*.user

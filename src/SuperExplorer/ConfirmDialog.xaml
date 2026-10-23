@@ -1,0 +1,31 @@
+<Window x:Class="SuperExplorer.ConfirmDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="确认删除" Width="400" SizeToContent="Height"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False" UseLayoutRounding="True"
+        FontFamily="Microsoft YaHei UI" FontSize="13">
+  <Border Background="{DynamicResource Panel3Brush}"
+          BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+          CornerRadius="12" Padding="20" Margin="12"
+          MouseLeftButtonDown="Root_MouseDown">
+    <StackPanel>
+      <TextBlock Text="确认删除" FontSize="14" FontWeight="SemiBold"
+                 Foreground="{DynamicResource TextBrush}"/>
+      <TextBlock x:Name="MessageText" Margin="0,10,0,0" FontSize="12"
+                 Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" LineHeight="20"/>
+      <Border Background="{DynamicResource Panel2Brush}"
+              BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+              CornerRadius="7" Padding="9,7" Margin="0,10,0,0">
+        <TextBlock x:Name="PathText" FontSize="10" Foreground="{DynamicResource DimBrush}"
+                   TextWrapping="Wrap" LineHeight="16"/>
+      </Border>
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+        <Button Content="取消" Style="{StaticResource FlatButton}" Margin="0,0,8,0"
+                Click="Cancel_Click"/>
+        <Button Content="移入回收站" Style="{StaticResource DangerButton}" Click="Ok_Click"/>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>
