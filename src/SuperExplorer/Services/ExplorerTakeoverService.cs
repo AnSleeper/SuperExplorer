@@ -40,6 +40,9 @@ namespace SuperExplorer.Services
                         using (var key = Registry.CurrentUser.CreateSubKey(root + @"\command"))
                         {
                             key.SetValue(null, "\"" + exe + "\" \"%1\"");
+                            // Win11 的系统默认值带 DelegateExecute 委托（仍走资源管理器），
+                            // 合并视图会保留 HKLM 的委托值，必须显式写空串覆盖掉才生效
+                            key.SetValue("DelegateExecute", "");
                         }
                     }
                     else

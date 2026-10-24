@@ -12,9 +12,6 @@ namespace SuperExplorer.Services
 
         public static AppSettings Current { get; private set; } = new AppSettings();
 
-        // true = 本次启动时 settings.json 不存在（全新安装），用于做首次运行初始化
-        public static bool FreshInstall { get; private set; }
-
         private static string DataDir
         {
             get
@@ -32,14 +29,9 @@ namespace SuperExplorer.Services
                 _path = Path.Combine(DataDir, "settings.json");
                 if (File.Exists(_path))
                 {
-                    FreshInstall = false;
                     var json = File.ReadAllText(_path);
                     var s = JsonSerializer.Deserialize<AppSettings>(json);
                     if (s != null) Current = s;
-                }
-                else
-                {
-                    FreshInstall = true;
                 }
             }
             catch

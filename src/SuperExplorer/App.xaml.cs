@@ -40,7 +40,10 @@ namespace SuperExplorer
             {
                 try
                 {
-                    var p = Path.GetFullPath(e.Args[0]);
+                    // 盘符根目录（C:\）经 Shell 引号包裹后，尾反斜杠会把引号转义，
+                    // 收到的参数形如 C:" —— 剥掉残缺的尾引号再解析
+                    var raw = e.Args[0].Trim().TrimEnd('"');
+                    var p = Path.GetFullPath(raw);
                     if (Directory.Exists(p)) argFolder = p;
                 }
                 catch { }
@@ -57,17 +60,31 @@ namespace SuperExplorer
             }
 
             SettingsService.Load();
-            if (SettingsService.FreshInstall)
+
+            // 每个新版本的第一次运行都把桌面补进常用文件夹（用户手动取消后本版本不再重复添加），
+            // 这样覆盖升级新版本的用户也能拿到默认常用项
+            try
             {
-                // 全新安装：默认把当前用户桌面加入常用文件夹
-                try
+                var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "";
+                if (ver.Length > 0 &&
+                    !string.Equals(SettingsService.Current.SeededFavoriteVersion, ver, StringComparison.OrdinalIgnoreCase))
                 {
                     var desk = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                     if (!string.IsNullOrEmpty(desk) && Directory.Exists(desk))
-                        SettingsService.Current.Favorites.Add(desk);
+                    {
+                        var favs = SettingsService.Current.Favorites;
+                        bool exists = false;
+                        foreach (var f in favs)
+                        {
+                            if (string.Equals(f, desk, StringComparison.OrdinalIgnoreCase)) { exists = true; break; }
+                        }
+                        if (!exists) favs.Add(desk);
+                    }
+                    SettingsService.Current.SeededFavoriteVersion = ver;
+                    SettingsService.Save();
                 }
-                catch { }
             }
+            catch { }
 
             ThemeService.Apply(SettingsService.Current.Theme);
             UiScaleService.Apply(SettingsService.Current.FontStep);

@@ -22,6 +22,9 @@ namespace SuperExplorer.Models
         // 关闭窗口：true=最小化到托盘 false=直接退出
         public bool MinimizeOnClose { get; set; } = true;
 
+        // 上次自动把桌面加入常用文件夹时的程序版本；版本变化后首个运行再补种一次
+        public string SeededFavoriteVersion { get; set; }
+
         public List<string> Favorites { get; set; } = new List<string>();
         public List<string> OpenFolders { get; set; } = new List<string>();
 

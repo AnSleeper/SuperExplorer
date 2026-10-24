@@ -38,6 +38,7 @@ namespace SuperExplorer
         private readonly string _initialFolder;
         private readonly DispatcherTimer _searchDebounce;
         private System.Windows.Forms.NotifyIcon _tray;
+        private FolderPanel _searchPanel;
 
         public MainWindow(string initialFolder = null)
         {
@@ -259,6 +260,9 @@ namespace SuperExplorer
         private void OnPanelClose(FolderPanel panel)
         {
             _panels.Remove(panel);
+
+            // 只有搜索所针对的那个面板被关闭时才清空搜索框；关闭其他面板不影响
+            if (ReferenceEquals(panel, _searchPanel)) ClearSearchBox();
             if (ReferenceEquals(_active, panel)) _active = null;
 
             BuildWorkspace();
@@ -725,12 +729,23 @@ namespace SuperExplorer
             }
         }
 
+        private void ClearSearchBox()
+        {
+            _searchDebounce.Stop();
+            _searchPanel = null;
+            if (SearchBox.Text.Length == 0) return;
+            // Clear 触发 TextChanged 会重启防抖；350ms 后空词触发 ClearSearch，
+            // 对当前面板只是多一次无害的重新加载
+            SearchBox.Clear();
+        }
+
         private void RunActiveSearch()
         {
             var term = SearchBox.Text;
 
             if (term.Trim().Length == 0)
             {
+                _searchPanel = null;
                 if (_active != null) _active.ClearSearch();
                 return;
             }
@@ -741,6 +756,8 @@ namespace SuperExplorer
                 return;
             }
 
+            // 记录搜索针对的面板：该面板被关闭时搜索框随之清空
+            _searchPanel = _active;
             _active.RunSearch(term);
         }
 
@@ -950,13 +967,31 @@ namespace SuperExplorer
 
         private void AdoptExplorerWindows(List<string> paths)
         {
+            // 原有面板 + 资源管理器文件夹总数超过上限时：
+            // 清空原有面板，整体替换为资源管理器带来的文件夹；仍超上限则只开前几个并提醒
+            bool replaced = false;
+            if (_panels.Count + paths.Count > MaxPanels && _panels.Count > 0)
+            {
+                foreach (var p in _panels.ToList()) OnPanelClose(p);
+                replaced = true;
+            }
+
+            int opened = 0;
             foreach (var p in paths)
             {
                 if (_panels.Count >= MaxPanels) break;
                 OpenFolder(p);
+                opened++;
             }
+
             ExplorerWindowService.CloseFolderWindows(paths);
-            Toast("已接管 " + paths.Count + " 个资源管理器窗口");
+
+            if (opened < paths.Count)
+                Toast("文件夹数量超过上限（" + MaxPanels + "），已打开前 " + opened + " 个");
+            else if (replaced)
+                Toast("已清空原有面板，接管了资源管理器的 " + opened + " 个文件夹");
+            else
+                Toast("已接管 " + opened + " 个资源管理器窗口");
         }
 
         // ---------- 快捷键 ----------
