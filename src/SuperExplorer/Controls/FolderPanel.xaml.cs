@@ -105,6 +105,9 @@ namespace SuperExplorer.Controls
 
             Grid.NewFolderRequested += CreateNewFolder;
 
+            // 批量重命名：编辑项用基础名，其余按目录顺序加 (1)(2)… 序号，冲突自动顺延
+            Grid.BatchRenameRequested += (targets, edited, baseName) => HandleBatchRename(targets, edited, baseName);
+
             // 文件/文件夹拖到文件夹缩略图上：移入该文件夹（而不是当前面板的文件夹）
             AddHandler(TileView.FolderDropRequestedEvent, new RoutedEventHandler(OnTileFolderDrop));
         }
@@ -185,6 +188,91 @@ namespace SuperExplorer.Controls
         public void BeginRename()
         {
             Grid.BeginRename();
+        }
+
+        /// <summary>
+        /// 批量重命名（Windows 资源管理器规则）：被编辑的项使用基础名，
+        /// 其余按顺序「基础名 (1)」「基础名 (2)」…；每个文件保留自己的扩展名；
+        /// 目标名被占用时序号自动顺延；已改名腾出的旧名允许后续项使用。
+        /// </summary>
+        private void HandleBatchRename(IReadOnlyList<FileEntry> targets, FileEntry edited, string baseName)
+        {
+            baseName = (baseName ?? "").Trim();
+            if (baseName.Length == 0)
+            {
+                Notified?.Invoke("名称不能为空");
+                return;
+            }
+            if (baseName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            {
+                Notified?.Invoke("名称包含非法字符");
+                return;
+            }
+
+            var dir = Path.GetDirectoryName(edited.FullPath);
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+            {
+                _ = ReloadAsync();
+                return;
+            }
+
+            // 已成功改名腾出来的旧路径，后续项可以复用
+            var freed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int nextNum = 1;
+            int ok = 0;
+            string firstError = null;
+
+            foreach (var entry in targets)
+            {
+                if (entry == null) continue;
+
+                string ext = entry.IsFolder ? "" : (Path.GetExtension(entry.Name) ?? "");
+                bool isEdited = ReferenceEquals(entry, edited);
+
+                int n = isEdited ? 0 : nextNum;
+                string targetPath = null;
+                while (true)
+                {
+                    var name = n == 0 ? baseName : baseName + " (" + n + ")";
+                    if (ext.Length > 0 && !name.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+                        name += ext;
+                    var candidate = Path.Combine(dir, name);
+
+                    bool taken = !freed.Contains(candidate) &&
+                                 !string.Equals(candidate, entry.FullPath, StringComparison.OrdinalIgnoreCase) &&
+                                 (File.Exists(candidate) || Directory.Exists(candidate));
+                    if (!taken)
+                    {
+                        targetPath = candidate;
+                        break;
+                    }
+                    n++;
+                }
+
+                if (!isEdited) nextNum = n + 1;
+
+                var err = FileSystemService.RenameItem(entry.FullPath, Path.GetFileName(targetPath));
+                if (err == null)
+                {
+                    ok++;
+                    freed.Add(entry.FullPath);
+                    UndoService.Push(new UndoAction
+                    {
+                        Kind = UndoKind.Rename,
+                        SourcePath = entry.FullPath,
+                        TargetPath = targetPath
+                    });
+                }
+                else if (firstError == null)
+                {
+                    firstError = entry.Name + "：" + err;
+                }
+            }
+
+            if (ok > 0) Notified?.Invoke("已重命名 " + ok + " 项（其余项同名自动加序号）");
+            if (firstError != null) Notified?.Invoke(firstError);
+
+            _ = ReloadAsync();
         }
 
         public void SelectAll()

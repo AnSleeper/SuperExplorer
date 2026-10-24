@@ -74,6 +74,9 @@ namespace SuperExplorer.Controls
         /// <summary>达到拖动阈值时交给 FileGrid 发起（多选时拖整组）。</summary>
         public event Action<TileView> DragSourceRequested;
 
+        /// <summary>右键菜单「重命名」交给 FileGrid 决定单改还是批量改。</summary>
+        public event Action<TileView> RenameInvoked;
+
         public bool IsSelected
         {
             get { return (bool)GetValue(IsSelectedProperty); }
@@ -412,6 +415,12 @@ namespace SuperExplorer.Controls
 
         private void MenuRename_Click(object sender, RoutedEventArgs e)
         {
+            if (RenameInvoked != null)
+            {
+                RenameInvoked(this);
+                return;
+            }
+
             var entry = DataContext as FileEntry;
             if (entry != null) entry.IsRenaming = true;
         }

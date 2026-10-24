@@ -36,6 +36,10 @@ namespace SuperExplorer.Controls
         private Point _marqueeStart;
         private HashSet<FileEntry> _marqueeBase;
 
+        // 批量重命名：进入编辑的目标组与被编辑的那一项
+        private List<FileEntry> _batchTargets;
+        private FileEntry _batchEdited;
+
         private double _tileSize = 140;
         private double _cellW = 140;
         private double _cellH = 176;
@@ -54,6 +58,7 @@ namespace SuperExplorer.Controls
         public event Action<FileEntry> LocateRequested;
         public event Action<FileEntry> SelectionChanged;
         public event Action<FileEntry, string> RenameRequested;
+        public event Action<IReadOnlyList<FileEntry>, FileEntry, string> BatchRenameRequested;
         public event Action NewFolderRequested;
 
         public FileGrid()
@@ -342,6 +347,7 @@ namespace SuperExplorer.Controls
 
             _items = items ?? new List<FileEntry>();
             ClearSelectionQuiet();
+            CancelBatchRename();
             ClearTiles();
             _lastFrom = -1;
             _lastTo = -1;
@@ -379,13 +385,52 @@ namespace SuperExplorer.Controls
             if (entry != null) SelectSingle(entry);
         }
 
+        private void CancelBatchRename()
+        {
+            _batchTargets = null;
+            _batchEdited = null;
+        }
+
         /// <summary>
-        /// 进入重命名：只作用于当前唯一/首个选中项，先确保卡片可见。
+        /// F2 进入重命名：多选时为批量模式（编辑选中组的第一项，提交后整组按 基础名+序号 重命名）。
         /// </summary>
         public void BeginRename()
         {
             var target = SelectedEntry;
             if (target == null) return;
+            BeginRenameCore(target);
+        }
+
+        /// <summary>右键菜单「重命名」入口：点在多选组上即批量模式，编辑右键的那一项。</summary>
+        private void BeginRenameAt(TileView tile)
+        {
+            var target = tile.DataContext as FileEntry;
+            if (target == null) return;
+
+            var sel = SelectionSnapshot();
+            if (sel.Count > 1 && _selectionSet.Contains(target))
+            {
+                BeginRenameCore(target);
+            }
+            else
+            {
+                SelectSingle(target);
+                BeginRenameCore(target);
+            }
+        }
+
+        private void BeginRenameCore(FileEntry target)
+        {
+            var sel = SelectionSnapshot();
+            if (sel.Count > 1 && sel.Contains(target))
+            {
+                _batchTargets = sel;
+                _batchEdited = target;
+            }
+            else
+            {
+                CancelBatchRename();
+            }
 
             int idx = _items.IndexOf(target);
             if (idx < 0) return;
@@ -567,7 +612,24 @@ namespace SuperExplorer.Controls
                 var entry = tile.DataContext as FileEntry;
                 if (entry != null) LocateRequested?.Invoke(entry);
             };
-            tile.RenameCommitted += (entry, name) => RenameRequested?.Invoke(entry, name);
+            tile.RenameCommitted += (entry, name) =>
+            {
+                // 批量模式：编辑的是目标组里的那一项，提交后整组按 基础名+序号 处理
+                if (_batchTargets != null && _batchEdited != null &&
+                    ReferenceEquals(entry, _batchEdited) && _batchTargets.Count > 1)
+                {
+                    var targets = _batchTargets;
+                    var edited = _batchEdited;
+                    CancelBatchRename();
+                    BatchRenameRequested?.Invoke(targets, edited, name);
+                }
+                else
+                {
+                    CancelBatchRename();
+                    RenameRequested?.Invoke(entry, name);
+                }
+            };
+            tile.RenameInvoked += t => BeginRenameAt(t);
             tile.NewFolderRequested += () => NewFolderRequested?.Invoke();
 
             return tile;
