@@ -618,6 +618,19 @@ namespace SuperExplorer.Controls
             var list = new List<FileEntry>();
             if (data == null) return list;
 
+            if (data.GetDataPresent("SuperExplorer.FileEntries"))
+            {
+                var multi = data.GetData("SuperExplorer.FileEntries") as List<FileEntry>;
+                if (multi != null)
+                {
+                    foreach (var entry in multi)
+                    {
+                        if (entry != null) list.Add(entry);
+                    }
+                    return list;
+                }
+            }
+
             if (data.GetDataPresent("SuperExplorer.FileEntry"))
             {
                 var entry = data.GetData("SuperExplorer.FileEntry") as FileEntry;

@@ -4,6 +4,8 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
+using System.Windows.Media;
 using SuperExplorer.Models;
 
 namespace SuperExplorer.Controls
@@ -11,6 +13,7 @@ namespace SuperExplorer.Controls
     /// <summary>
     /// 只渲染可视区域行，避免一次性创建整目录的卡片与缩略图。
     /// 尺寸变化时只重排已有卡片，不清空重建，避免拖拽缩放时闪烁与空白卡片。
+    /// 选择模型：单击选中；Ctrl+点击切换选中；Shift+点击范围选中；Ctrl+A 全选；点空白清空。
     /// </summary>
     public partial class FileGrid : UserControl
     {
@@ -19,7 +22,8 @@ namespace SuperExplorer.Controls
         private List<FileEntry> _items = new List<FileEntry>();
         private readonly Dictionary<int, TileView> _tiles = new Dictionary<int, TileView>();
 
-        private FileEntry _selected;
+        private readonly HashSet<FileEntry> _selectionSet = new HashSet<FileEntry>();
+        private int _anchor = -1;
 
         private double _tileSize = 140;
         private double _cellW = 140;
@@ -34,6 +38,7 @@ namespace SuperExplorer.Controls
         private double _lastCellW = -1;
 
         public event Action<FileEntry> EntryActivated;
+        public event Action<IReadOnlyList<FileEntry>> EntriesActivated;
         public event Action<FileEntry> DeleteRequested;
         public event Action<FileEntry> LocateRequested;
         public event Action<FileEntry> SelectionChanged;
@@ -47,17 +52,128 @@ namespace SuperExplorer.Controls
             Scroll.ScrollChanged += (s, e) => UpdateWindow(false);
             SizeChanged += (s, e) => { MeasureCells(); UpdateWindow(true); };
             Loaded += (s, e) => { MeasureCells(); UpdateWindow(true); };
+
+            // 点在空白处（不是任何卡片上）清空选择
+            Scroll.PreviewMouseLeftButtonDown += OnBackgroundDown;
         }
+
+        private void OnBackgroundDown(object sender, MouseButtonEventArgs e)
+        {
+            if (FindAncestor<TileView>(e.OriginalSource as DependencyObject) == null)
+                ClearSelection();
+        }
+
+        private static T FindAncestor<T>(DependencyObject d) where T : DependencyObject
+        {
+            while (d != null)
+            {
+                if (d is T) return (T)d;
+                d = VisualTreeHelper.GetParent(d);
+            }
+            return null;
+        }
+
+        // ---------- 选择 ----------
 
         public FileEntry SelectedEntry
         {
-            get { return _selected; }
+            get { return SelectionSnapshot().FirstOrDefault(); }
         }
 
-        public IReadOnlyList<FileEntry> Items
+        public IReadOnlyList<FileEntry> SelectedEntries
         {
-            get { return _items; }
+            get { return SelectionSnapshot(); }
         }
+
+        public int SelectedCount
+        {
+            get { return _selectionSet.Count; }
+        }
+
+        /// <summary>按目录顺序返回当前选中的条目快照。</summary>
+        private List<FileEntry> SelectionSnapshot()
+        {
+            if (_selectionSet.Count == 0) return new List<FileEntry>();
+            return _items.Where(_selectionSet.Contains).ToList();
+        }
+
+        public void SelectAll()
+        {
+            if (_items.Count == 0) return;
+            foreach (var it in _items)
+            {
+                it.IsSelected = true;
+                _selectionSet.Add(it);
+            }
+            SelectionChanged?.Invoke(SelectedEntry);
+        }
+
+        public void ClearSelection()
+        {
+            ClearSelectionQuiet();
+            SelectionChanged?.Invoke(null);
+        }
+
+        private void ClearSelectionQuiet()
+        {
+            foreach (var it in _selectionSet) it.IsSelected = false;
+            _selectionSet.Clear();
+            _anchor = -1;
+        }
+
+        private void SelectSingle(FileEntry entry)
+        {
+            ClearSelectionQuiet();
+            if (entry != null)
+            {
+                entry.IsSelected = true;
+                _selectionSet.Add(entry);
+                _anchor = _items.IndexOf(entry);
+            }
+            SelectionChanged?.Invoke(entry);
+        }
+
+        /// <summary>卡片按下时的选择逻辑，按当前键盘修饰键决定单选 / 切换 / 范围。</summary>
+        private void HandleTileClick(FileEntry entry)
+        {
+            if (entry == null) return;
+
+            var mods = Keyboard.Modifiers;
+            int idx = _items.IndexOf(entry);
+
+            if ((mods & ModifierKeys.Control) != 0)
+            {
+                if (_selectionSet.Contains(entry))
+                {
+                    entry.IsSelected = false;
+                    _selectionSet.Remove(entry);
+                }
+                else
+                {
+                    entry.IsSelected = true;
+                    _selectionSet.Add(entry);
+                }
+                _anchor = idx;
+                SelectionChanged?.Invoke(SelectedEntry);
+            }
+            else if ((mods & ModifierKeys.Shift) != 0 && _anchor >= 0 && idx >= 0)
+            {
+                int from = Math.Min(_anchor, idx);
+                int to = Math.Max(_anchor, idx);
+                for (int i = from; i <= to; i++)
+                {
+                    var it = _items[i];
+                    if (_selectionSet.Add(it)) it.IsSelected = true;
+                }
+                SelectionChanged?.Invoke(SelectedEntry);
+            }
+            else
+            {
+                SelectSingle(entry);
+            }
+        }
+
+        // ---------- 对外接口 ----------
 
         public double TileSize
         {
@@ -76,7 +192,7 @@ namespace SuperExplorer.Controls
             double offset = Scroll.VerticalOffset;
 
             _items = items ?? new List<FileEntry>();
-            _selected = null;
+            ClearSelectionQuiet();
             ClearTiles();
             _lastFrom = -1;
             _lastTo = -1;
@@ -107,26 +223,22 @@ namespace SuperExplorer.Controls
             UpdateWindow(true);
         }
 
-        public void ClearSelection()
-        {
-            Select(null);
-        }
-
         public void SelectByPath(string path)
         {
             var entry = _items.FirstOrDefault(x =>
                 string.Equals(x.FullPath, path, StringComparison.OrdinalIgnoreCase));
-            if (entry != null) Select(entry);
+            if (entry != null) SelectSingle(entry);
         }
 
         /// <summary>
-        /// 进入重命名：先确保目标卡片已创建并在可视范围内，再打开输入框。
+        /// 进入重命名：只作用于当前唯一/首个选中项，先确保卡片可见。
         /// </summary>
         public void BeginRename()
         {
-            if (_selected == null) return;
+            var target = SelectedEntry;
+            if (target == null) return;
 
-            int idx = _items.IndexOf(_selected);
+            int idx = _items.IndexOf(target);
             if (idx < 0) return;
 
             double top = (idx / _cols) * _rowH;
@@ -138,7 +250,7 @@ namespace SuperExplorer.Controls
             else if (bottom > viewBottom) Scroll.ScrollToVerticalOffset(bottom - Scroll.ViewportHeight);
 
             UpdateWindow(true);
-            _selected.IsRenaming = true;
+            target.IsRenaming = true;
         }
 
         private void MenuNewFolder_Click(object sender, RoutedEventArgs e)
@@ -146,14 +258,7 @@ namespace SuperExplorer.Controls
             NewFolderRequested?.Invoke();
         }
 
-        private void Select(FileEntry entry)
-        {
-            if (ReferenceEquals(_selected, entry)) return;
-            if (_selected != null) _selected.IsSelected = false;
-            _selected = entry;
-            if (entry != null) entry.IsSelected = true;
-            SelectionChanged?.Invoke(entry);
-        }
+        // ---------- 度量与虚拟化 ----------
 
         private void MeasureCells()
         {
@@ -283,12 +388,23 @@ namespace SuperExplorer.Controls
             var tile = new TileView { DataContext = _items[index] };
             tile.SetBinding(TileView.IsSelectedProperty, new Binding("IsSelected"));
 
-            tile.Selected += (s, e) => Select(tile.DataContext as FileEntry);
+            tile.Selected += (s, e) =>
+            {
+                var entry = tile.DataContext as FileEntry;
+                if (entry != null && !entry.IsRenaming) HandleTileClick(entry);
+            };
             tile.OpenRequested += (s, e) =>
             {
                 var entry = tile.DataContext as FileEntry;
-                if (entry != null) EntryActivated?.Invoke(entry);
+                if (entry == null) return;
+
+                // 多选状态下双击其中任意一个 = 打开整组（文件夹开面板、文件开系统程序）
+                if (_selectionSet.Count > 1 && _selectionSet.Contains(entry))
+                    EntriesActivated?.Invoke(SelectionSnapshot());
+                else
+                    EntryActivated?.Invoke(entry);
             };
+            tile.DragSourceRequested += t => StartTileDrag(t);
             tile.DeleteRequested += (s, e) =>
             {
                 var entry = tile.DataContext as FileEntry;
@@ -303,6 +419,29 @@ namespace SuperExplorer.Controls
             tile.NewFolderRequested += () => NewFolderRequested?.Invoke();
 
             return tile;
+        }
+
+        /// <summary>
+        /// 多选拖拽：拖动选中组中的任意卡片 = 拖整组；拖未选中的卡片 = 只拖它一个。
+        /// </summary>
+        private void StartTileDrag(TileView tile)
+        {
+            var anchor = tile.DataContext as FileEntry;
+            if (anchor == null) return;
+
+            var list = (_selectionSet.Count > 1 && _selectionSet.Contains(anchor))
+                ? SelectionSnapshot()
+                : new List<FileEntry> { anchor };
+
+            try
+            {
+                var data = new DataObject();
+                data.SetData("SuperExplorer.FileEntries", list);
+                // 同时提供 FileDrop，方便直接拖进系统资源管理器 / 其他软件
+                data.SetData(DataFormats.FileDrop, list.Select(x => x.FullPath).ToArray());
+                DragDrop.DoDragDrop(tile, data, DragDropEffects.Move | DragDropEffects.Copy);
+            }
+            catch { }
         }
 
         private void ClearTiles()

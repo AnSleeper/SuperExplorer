@@ -909,7 +909,8 @@ namespace SuperExplorer
         {
             var list = new List<string>();
             if (data == null) return list;
-            if (data.GetDataPresent("SuperExplorer.FileEntry") ||
+            if (data.GetDataPresent("SuperExplorer.FileEntries") ||
+                data.GetDataPresent("SuperExplorer.FileEntry") ||
                 data.GetDataPresent("SuperExplorer.Panel")) return list;
             if (!data.GetDataPresent(DataFormats.FileDrop)) return list;
 
@@ -1120,6 +1121,11 @@ namespace SuperExplorer
                 SearchBox.Focus();
                 SearchBox.SelectAll();
             }
+            else if (e.Key == Key.A)
+            {
+                e.Handled = true;
+                if (_active != null) _active.SelectAll();
+            }
             else if (e.Key == Key.Z)
             {
                 e.Handled = true;
@@ -1144,35 +1150,39 @@ namespace SuperExplorer
 
         private void CopySelection()
         {
-            var entry = _active == null ? null : _active.SelectedEntry;
-            if (entry == null)
+            var entries = _active == null ? null : _active.SelectedEntries;
+            if (entries == null || entries.Count == 0)
             {
-                Toast("先在面板里选中一个文件");
+                Toast("先在面板里选中文件（可 Ctrl 多选）");
                 return;
             }
-            _clipboard.Clear();
-            _clipboard.Add(entry);
 
-            // 同时写入系统剪贴板：文件路径让资源管理器能粘贴，图片内容让聊天/绘图软件能直接粘贴
+            _clipboard.Clear();
+            _clipboard.AddRange(entries);
+
+            // 同时写入系统剪贴板：文件路径数组让资源管理器能粘贴，
+            // 只选中一张图片时额外附上图片内容，聊天/绘图软件可直接粘贴
             try
             {
                 var data = new DataObject();
-                data.SetData(DataFormats.FileDrop, new[] { entry.FullPath });
+                data.SetData(DataFormats.FileDrop, entries.Select(x => x.FullPath).ToArray());
 
-                if (entry.Kind == EntryKind.Image)
+                if (entries.Count == 1 && entries[0].Kind == EntryKind.Image)
                 {
                     var bmp = new System.Windows.Media.Imaging.BitmapImage();
                     bmp.BeginInit();
                     bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
                     bmp.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreImageCache;
-                    bmp.UriSource = new Uri(entry.FullPath);
+                    bmp.UriSource = new Uri(entries[0].FullPath);
                     bmp.EndInit();
                     bmp.Freeze();
                     data.SetImage(bmp);
                 }
 
                 Clipboard.SetDataObject(data, true);
-                Toast("已复制：" + entry.Name);
+                Toast(entries.Count == 1
+                    ? "已复制：" + entries[0].Name
+                    : "已复制 " + entries.Count + " 项");
             }
             catch (Exception ex)
             {
@@ -1198,47 +1208,92 @@ namespace SuperExplorer
         private void DeleteSelected()
         {
             if (_active == null) return;
-            var entry = _active.SelectedEntry;
-            if (entry == null)
+            var entries = _active.SelectedEntries;
+            if (entries == null || entries.Count == 0)
             {
-                Toast("先在面板里选中一个文件");
+                Toast("先在面板里选中文件（可 Ctrl 多选）");
                 return;
             }
-            DeleteEntry(_active, entry);
+            DeleteEntries(_active, entries.ToList());
         }
 
         // ---------- 删除 ----------
 
-        private async void DeleteEntry(FolderPanel panel, FileEntry entry)
+        private void DeleteEntry(FolderPanel panel, FileEntry entry)
         {
             if (entry == null) return;
 
+            // 右键删除点在多选组上：对整组生效
+            var selection = panel.SelectedEntries;
+            if (selection != null && selection.Count > 1)
+            {
+                bool inSelection = false;
+                foreach (var s in selection)
+                {
+                    if (ReferenceEquals(s, entry)) { inSelection = true; break; }
+                }
+                if (inSelection)
+                {
+                    DeleteEntries(panel, selection.ToList());
+                    return;
+                }
+            }
+
+            DeleteEntries(panel, new List<FileEntry> { entry });
+        }
+
+        private async void DeleteEntries(FolderPanel panel, List<FileEntry> entries)
+        {
+            if (entries == null || entries.Count == 0) return;
+
             if (SettingsService.Current.ConfirmDelete)
             {
+                var detail = entries.Count == 1
+                    ? entries[0].FullPath
+                    : string.Join("\n", entries.Take(5).Select(x => x.Name).ToArray()) +
+                      (entries.Count > 5 ? "\n… 共 " + entries.Count + " 项" : "");
                 var dialog = new ConfirmDialog(
-                    "本次删除将在本地执行，文件会被移入回收站。\n是否继续？",
-                    entry.FullPath) { Owner = this };
+                    entries.Count == 1
+                        ? "本次删除将在本地执行，文件会被移入回收站。\n是否继续？"
+                        : "将把 " + entries.Count + " 个文件/文件夹移入回收站。\n是否继续？",
+                    detail) { Owner = this };
                 if (dialog.ShowDialog() != true) return;
             }
 
-            bool ok = await Task.Run(() => FileSystemService.DeleteToRecycleBin(entry.FullPath));
-
-            if (ok)
+            int okCount = 0;
+            string lastFail = null;
+            foreach (var entry in entries)
             {
-                UndoService.Push(new UndoAction
+                bool ok = await Task.Run(() => FileSystemService.DeleteToRecycleBin(entry.FullPath));
+                if (ok)
                 {
-                    Kind = UndoKind.Delete,
-                    SourcePath = entry.FullPath
-                });
-                Toast("已移入回收站：" + entry.Name);
-                panel.Refresh();
-                Tree.RefreshSizes();
-                UpdateStatus();
+                    okCount++;
+                    UndoService.Push(new UndoAction
+                    {
+                        Kind = UndoKind.Delete,
+                        SourcePath = entry.FullPath
+                    });
+                }
+                else
+                {
+                    lastFail = entry.Name;
+                }
             }
-            else
+
+            if (okCount > 0)
             {
-                Toast("删除失败：" + entry.Name);
+                Toast(entries.Count == 1
+                    ? "已移入回收站：" + entries[0].Name
+                    : "已移入回收站 " + okCount + "/" + entries.Count + " 项");
             }
+            if (okCount < entries.Count && lastFail != null)
+            {
+                Toast("删除失败：" + lastFail);
+            }
+
+            panel.Refresh();
+            Tree.RefreshSizes();
+            UpdateStatus();
         }
 
         // ---------- 移动 / 复制 ----------
@@ -1262,26 +1317,38 @@ namespace SuperExplorer
             _busy = true;
             try
             {
+                // 先统一过滤非法项，多选时只弹一次汇总提示
+                var valid = new List<FileEntry>();
+                int skipped = 0;
                 foreach (var entry in entries)
                 {
                     if (!File.Exists(entry.FullPath) && !Directory.Exists(entry.FullPath))
                     {
-                        Toast("文件已不存在：" + entry.Name);
+                        skipped++;
                         continue;
                     }
 
                     if (FileSystemService.SameFolder(Path.GetDirectoryName(entry.FullPath), destDir))
                     {
-                        Toast("目标就是当前所在文件夹：" + entry.Name);
+                        skipped++;
                         continue;
                     }
 
                     if (entry.Kind == EntryKind.Folder &&
                         FileSystemService.IsSubPathOf(destDir, entry.FullPath))
                     {
-                        Toast("不能把文件夹移动到它自己的子目录");
+                        skipped++;
                         continue;
                     }
+
+                    valid.Add(entry);
+                }
+
+                if (skipped > 0)
+                    Toast("已跳过 " + skipped + " 项（不存在 / 已在目标文件夹 / 非法移动）");
+
+                foreach (var entry in valid)
+                {
 
                     if (copy)
                     {

@@ -71,6 +71,9 @@ namespace SuperExplorer.Controls
         public event Action<FileEntry, string> RenameCommitted;
         public event Action NewFolderRequested;
 
+        /// <summary>达到拖动阈值时交给 FileGrid 发起（多选时拖整组）。</summary>
+        public event Action<TileView> DragSourceRequested;
+
         public bool IsSelected
         {
             get { return (bool)GetValue(IsSelectedProperty); }
@@ -96,7 +99,11 @@ namespace SuperExplorer.Controls
             PreviewMouseLeftButtonDown += OnDown;
             PreviewMouseRightButtonDown += (s, e) =>
             {
-                RaiseEvent(new RoutedEventArgs(SelectedEvent, this));
+                // 右键点在已选中的卡片上：保留多选（弹出菜单对整组生效）；
+                // 点在未选中的卡片上：按普通单击语义改选
+                var entry = DataContext as FileEntry;
+                if (entry == null || !entry.IsSelected)
+                    RaiseEvent(new RoutedEventArgs(SelectedEvent, this));
             };
             MouseDoubleClick += (s, e) =>
             {
@@ -237,8 +244,15 @@ namespace SuperExplorer.Controls
             _dragging = true;
             try
             {
-                var data = new DataObject("SuperExplorer.FileEntry", entry);
-                DragDrop.DoDragDrop(this, data, DragDropEffects.Move | DragDropEffects.Copy);
+                if (DragSourceRequested != null)
+                {
+                    DragSourceRequested(this);
+                }
+                else
+                {
+                    var data = new DataObject("SuperExplorer.FileEntry", entry);
+                    DragDrop.DoDragDrop(this, data, DragDropEffects.Move | DragDropEffects.Copy);
+                }
             }
             catch { }
             finally { _dragging = false; }

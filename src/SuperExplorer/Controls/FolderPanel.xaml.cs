@@ -25,6 +25,11 @@ namespace SuperExplorer.Controls
             get { return Grid.SelectedEntry; }
         }
 
+        public System.Collections.Generic.IReadOnlyList<FileEntry> SelectedEntries
+        {
+            get { return Grid.SelectedEntries; }
+        }
+
         public event Action<FolderPanel> CloseRequested;
         public event Action<FolderPanel> Activated;
         public event Action<FolderPanel> Navigated;
@@ -61,6 +66,15 @@ namespace SuperExplorer.Controls
             {
                 if (entry.Kind == EntryKind.Folder) FolderActivated?.Invoke(this, entry.FullPath);
                 else FileActivated?.Invoke(this, entry);
+            };
+            // 多选状态下的双击 / 打开：整组处理（文件夹开面板，文件用系统程序打开）
+            Grid.EntriesActivated += list =>
+            {
+                foreach (var entry in list)
+                {
+                    if (entry.Kind == EntryKind.Folder) FolderActivated?.Invoke(this, entry.FullPath);
+                    else FileActivated?.Invoke(this, entry);
+                }
             };
             Grid.DeleteRequested += entry => DeleteRequested?.Invoke(this, entry);
             Grid.LocateRequested += entry => LocateRequested?.Invoke(this, entry);
@@ -123,10 +137,30 @@ namespace SuperExplorer.Controls
             FilesDroppedInto?.Invoke(this, target.FullPath, filtered, copy);
         }
 
+        private static bool IsInternalDrag(IDataObject data)
+        {
+            return data != null &&
+                   (data.GetDataPresent("SuperExplorer.FileEntries") ||
+                    data.GetDataPresent("SuperExplorer.FileEntry"));
+        }
+
         private static List<FileEntry> ExtractEntries(IDataObject data)
         {
             var list = new List<FileEntry>();
             if (data == null) return list;
+
+            if (data.GetDataPresent("SuperExplorer.FileEntries"))
+            {
+                var multi = data.GetData("SuperExplorer.FileEntries") as List<FileEntry>;
+                if (multi != null)
+                {
+                    foreach (var entry in multi)
+                    {
+                        if (entry != null) list.Add(entry);
+                    }
+                    return list;
+                }
+            }
 
             if (data.GetDataPresent("SuperExplorer.FileEntry"))
             {
@@ -151,6 +185,11 @@ namespace SuperExplorer.Controls
         public void BeginRename()
         {
             Grid.BeginRename();
+        }
+
+        public void SelectAll()
+        {
+            Grid.SelectAll();
         }
 
         private void CreateNewFolder()
@@ -546,10 +585,11 @@ namespace SuperExplorer.Controls
 
             var entries = new List<FileEntry>();
 
-            if (e.Data.GetDataPresent("SuperExplorer.FileEntry"))
+            if (IsInternalDrag(e.Data))
             {
-                var entry = e.Data.GetData("SuperExplorer.FileEntry") as FileEntry;
-                if (entry != null) entries.Add(entry);
+                // 程序内部拖拽（单选或多选）：直接按移动/复制处理，
+                // 逐项合法性（同目录、移进自己子目录）由 TransferAsync 统一拦截
+                entries = ExtractEntries(e.Data);
             }
             else if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
@@ -572,14 +612,7 @@ namespace SuperExplorer.Controls
                     return;
                 }
 
-                if (paths != null)
-                {
-                    foreach (var p in paths)
-                    {
-                        var entry = FileSystemService.EntryFromPath(p);
-                        if (entry != null) entries.Add(entry);
-                    }
-                }
+                entries = ExtractEntries(e.Data);
             }
 
             if (entries.Count == 0) return;
@@ -591,19 +624,9 @@ namespace SuperExplorer.Controls
 
         private bool CanAcceptFiles(IDataObject data)
         {
-            if (!data.GetDataPresent("SuperExplorer.FileEntry") &&
-                !data.GetDataPresent(DataFormats.FileDrop)) return false;
-
-            var entry = data.GetData("SuperExplorer.FileEntry") as FileEntry;
-            if (entry != null && string.IsNullOrEmpty(FolderPath)) return false;
-            if (entry != null)
-            {
-                if (FileSystemService.SameFolder(Path.GetDirectoryName(entry.FullPath), FolderPath))
-                    return false;
-                if (entry.Kind == EntryKind.Folder &&
-                    FileSystemService.IsSubPathOf(FolderPath, entry.FullPath)) return false;
-            }
-            return true;
+            if (string.IsNullOrEmpty(FolderPath)) return false;
+            if (IsInternalDrag(data)) return true;
+            return data != null && data.GetDataPresent(DataFormats.FileDrop);
         }
     }
 }
