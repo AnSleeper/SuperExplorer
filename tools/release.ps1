@@ -99,7 +99,13 @@ function Invoke-Gh {
                 if ($InFile) { $a.InFile = $InFile; $a.ContentType = $ContentType }
                 if ($p)      { $a.Proxy = $p }
                 return Invoke-RestMethod @a
-            } catch { $err = $_ }
+            } catch {
+                $err = $_
+                # 404 是「资源不存在」的正常业务结果（如 Release 尚未创建），不重试
+                $resp = $null
+                try { $resp = $_.Exception.Response } catch { }
+                if ($resp -and [int]$resp.StatusCode -eq 404) { return $null }
+            }
         }
         Write-Host "  网络失败（第 $attempt 轮）：$($err.Exception.Message)  15 秒后重试..."
         Start-Sleep -Seconds 15
