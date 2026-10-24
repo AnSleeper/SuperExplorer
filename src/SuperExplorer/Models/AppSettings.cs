@@ -25,6 +25,13 @@ namespace SuperExplorer.Models
         // 上次自动把桌面加入常用文件夹时的程序版本；版本变化后首个运行再补种一次
         public string SeededFavoriteVersion { get; set; }
 
+        // 文件排序：name / date / type / size，及是否递增
+        public string SortBy { get; set; } = "name";
+        public bool SortAsc { get; set; } = true;
+
+        // 是否显示左侧文件夹栏
+        public bool ShowTree { get; set; } = true;
+
         public List<string> Favorites { get; set; } = new List<string>();
         public List<string> OpenFolders { get; set; } = new List<string>();
 

@@ -167,6 +167,17 @@ namespace SuperExplorer
                 default: ThemeMono.IsChecked = true; break;
             }
 
+            string sortBy = string.IsNullOrEmpty(s.SortBy) ? "name" : s.SortBy;
+            SortNameRadio.IsChecked = sortBy == "name";
+            SortDateRadio.IsChecked = sortBy == "date";
+            SortTypeRadio.IsChecked = sortBy == "type";
+            SortSizeRadio.IsChecked = sortBy == "size";
+            SortAscRadio.IsChecked = s.SortAsc;
+            SortDescRadio.IsChecked = !s.SortAsc;
+
+            ShowTreeCheck.IsChecked = s.ShowTree;
+            UpdateTreeChrome();
+
             string drop = string.IsNullOrEmpty(s.FolderDropAction) ? "ask" : s.FolderDropAction;
             DropAskRadio.IsChecked = drop == "ask";
             DropOpenRadio.IsChecked = drop == "open";
@@ -213,6 +224,7 @@ namespace SuperExplorer
             panel.DeleteRequested += (p, entry) => DeleteEntry(p, entry);
             panel.LocateRequested += (p, entry) => FileSystemService.LocateInExplorer(entry.FullPath);
             panel.FilesDropped += (p, entries, copy) => { _ = TransferAsync(entries, p.FolderPath, copy); };
+            panel.FilesDroppedInto += (p, dir, entries, copy) => { _ = TransferAsync(entries, dir, copy); };
             panel.ExternalFolderDropped += (p, dirs) => HandleExternalFolderDrop(dirs);
             panel.PanelDropped += ReorderPanels;
             panel.Notified += Toast;
@@ -554,6 +566,68 @@ namespace SuperExplorer
             SettingsService.Current.TreeWidth = w;
             SettingsService.Save();
             if (TreeWidthValueText != null) TreeWidthValueText.Text = (int)w + " px";
+        }
+
+        // ---------- 左侧栏显示 / 隐藏 ----------
+
+        private void ToggleTree_Click(object sender, RoutedEventArgs e)
+        {
+            SettingsService.Current.ShowTree = !SettingsService.Current.ShowTree;
+            SettingsService.Save();
+            ShowTreeCheck.IsChecked = SettingsService.Current.ShowTree;
+            UpdateTreeChrome();
+        }
+
+        private void ShowTree_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!_ready) return;
+            SettingsService.Current.ShowTree = ShowTreeCheck.IsChecked == true;
+            SettingsService.Save();
+            UpdateTreeChrome();
+        }
+
+        private void UpdateTreeChrome()
+        {
+            bool show = SettingsService.Current.ShowTree;
+            TreeColumn.MinWidth = show ? 150 : 0;
+            TreeColumn.Width = show
+                ? new GridLength(Math.Max(150, SettingsService.Current.TreeWidth))
+                : new GridLength(0);
+            TreeSplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            ToggleTreeBtn.Content = show ? "◀" : "▶";
+        }
+
+        // ---------- 刷新与排序 ----------
+
+        private void RefreshAll_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var p in _panels) p.Refresh();
+            Tree.RefreshTree();
+        }
+
+        private void SortBtn_Click(object sender, RoutedEventArgs e)
+        {
+            SortPopup.IsOpen = true;
+        }
+
+        private void SortBy_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!_ready) return;
+            var rb = sender as RadioButton;
+            if (rb == null) return;
+            SettingsService.Current.SortBy = (rb.Tag as string) ?? "name";
+            SettingsService.Save();
+            foreach (var p in _panels) p.Refresh();
+        }
+
+        private void SortDir_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!_ready) return;
+            var rb = sender as RadioButton;
+            if (rb == null) return;
+            SettingsService.Current.SortAsc = (rb.Tag as string) != "desc";
+            SettingsService.Save();
+            foreach (var p in _panels) p.Refresh();
         }
 
         private void ResetTreeWidth_Click(object sender, RoutedEventArgs e)
@@ -1011,6 +1085,13 @@ namespace SuperExplorer
             {
                 e.Handled = true;
                 if (_active != null) _active.BeginRename();
+                return;
+            }
+
+            if (e.Key == Key.F5)
+            {
+                e.Handled = true;
+                if (_active != null) _active.Refresh();
                 return;
             }
 

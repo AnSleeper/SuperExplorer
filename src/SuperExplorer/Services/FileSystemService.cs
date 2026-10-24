@@ -258,6 +258,30 @@ namespace SuperExplorer.Services
             }
         }
 
+        /// <summary>
+        /// 面板内容排序：文件夹永远排在文件前面（内部按名称自然排序），
+        /// 文件按指定字段排，同名退化按自然名称排。纯内存操作，零额外开销。
+        /// </summary>
+        public static void ApplySort(List<FileEntry> list, string sortBy, bool asc)
+        {
+            list.Sort((a, b) =>
+            {
+                if (a.IsFolder != b.IsFolder) return a.IsFolder ? -1 : 1;
+                if (a.IsFolder) return NaturalComparer.Instance.Compare(a.Name, b.Name);
+
+                int r;
+                switch (sortBy)
+                {
+                    case "date": r = a.Modified.CompareTo(b.Modified); break;
+                    case "type": r = string.CompareOrdinal(a.Ext ?? "", b.Ext ?? ""); break;
+                    case "size": r = a.Size.CompareTo(b.Size); break;
+                    default: r = 0; break;
+                }
+                if (r == 0) r = NaturalComparer.Instance.Compare(a.Name, b.Name);
+                return asc ? r : -r;
+            });
+        }
+
         private static string FormatSize(long size)
         {
             if (size < 1024) return size + " B";

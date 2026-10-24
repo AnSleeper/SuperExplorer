@@ -27,9 +27,14 @@
                      VerticalAlignment="Center"/>
           <Button x:Name="GearBtn" Content="⚙" Style="{StaticResource IconButton}"
                   Margin="8,0,0,0" Click="Gear_Click" ToolTip="设置"/>
+          <Button x:Name="ToggleTreeBtn" Content="◀" Style="{StaticResource IconButton}"
+                  Margin="2,0,0,0" Click="ToggleTree_Click" ToolTip="隐藏 / 显示左侧文件夹栏"/>
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+          <Button x:Name="RefreshBtn" Content="⟳" Style="{StaticResource IconButton}"
+                  Width="28" Height="28" FontSize="16" Margin="0,0,10,0"
+                  Click="RefreshAll_Click" ToolTip="刷新全部面板（F5 刷新当前面板）"/>
           <Border Background="{DynamicResource Panel2Brush}"
                   BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                   CornerRadius="7" Padding="8,3" Margin="0,0,12,0" VerticalAlignment="Center">
@@ -58,6 +63,8 @@
                            Tag="grid" Checked="Layout_Checked"/>
             </StackPanel>
           </Border>
+          <Button x:Name="SortBtn" Content="排序 ▾" Style="{StaticResource FlatButton}"
+                  Padding="10,4" Margin="12,0,0,0" Click="SortBtn_Click" ToolTip="文件排序方式"/>
           <TextBlock x:Name="OpenCountText" Margin="16,0,0,0" FontSize="{DynamicResource FontMd}"
                      Foreground="{DynamicResource DimBrush}" VerticalAlignment="Center"/>
         </StackPanel>
@@ -76,7 +83,7 @@
         <controls:FolderTree x:Name="Tree"/>
       </Border>
 
-      <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+      <GridSplitter x:Name="TreeSplitter" Grid.Column="1" Width="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                     Background="Transparent" ResizeBehavior="PreviousAndNext" ResizeDirection="Columns"
                     Cursor="SizeWE" DragCompleted="TreeSplitter_DragCompleted"/>
 
@@ -102,6 +109,33 @@
                    HorizontalAlignment="Right" VerticalAlignment="Center"/>
       </Grid>
     </Border>
+
+    <Popup x:Name="SortPopup" PlacementTarget="{Binding ElementName=SortBtn}"
+           Placement="Bottom" VerticalOffset="6" StaysOpen="False">
+      <Border Background="{DynamicResource Panel3Brush}"
+              BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+              CornerRadius="10" Padding="12,10" Width="200" Margin="0,0,0,6">
+        <StackPanel>
+          <TextBlock Text="排序方式" FontSize="{DynamicResource FontSm}" FontWeight="SemiBold"
+                     Foreground="{DynamicResource DimBrush}" Margin="6,0,0,6"/>
+          <RadioButton x:Name="SortNameRadio" GroupName="SortBy" Content="名称" Tag="name"
+                       Style="{StaticResource ThemeOption}" Checked="SortBy_Checked"/>
+          <RadioButton x:Name="SortDateRadio" GroupName="SortBy" Content="修改日期" Tag="date"
+                       Style="{StaticResource ThemeOption}" Checked="SortBy_Checked"/>
+          <RadioButton x:Name="SortTypeRadio" GroupName="SortBy" Content="类型" Tag="type"
+                       Style="{StaticResource ThemeOption}" Checked="SortBy_Checked"/>
+          <RadioButton x:Name="SortSizeRadio" GroupName="SortBy" Content="大小" Tag="size"
+                       Style="{StaticResource ThemeOption}" Checked="SortBy_Checked"/>
+          <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="4,8,4,6"/>
+          <RadioButton x:Name="SortAscRadio" GroupName="SortDir" Content="递增" Tag="asc"
+                       Style="{StaticResource ThemeOption}" Checked="SortDir_Checked"/>
+          <RadioButton x:Name="SortDescRadio" GroupName="SortDir" Content="递减" Tag="desc"
+                       Style="{StaticResource ThemeOption}" Checked="SortDir_Checked"/>
+          <TextBlock Text="文件夹始终排在文件前面" FontSize="{DynamicResource FontXs}"
+                     Foreground="{DynamicResource DimBrush}" Margin="6,8,0,2"/>
+        </StackPanel>
+      </Border>
+    </Popup>
 
     <Popup x:Name="SettingsPopup" PlacementTarget="{Binding ElementName=GearBtn}"
            Placement="Bottom" HorizontalOffset="-100" VerticalOffset="6" StaysOpen="False">
@@ -264,6 +298,23 @@
             <RadioButton x:Name="StartupExpRadio" GroupName="StartupOpen" Content="资源管理器已打开的" Tag="explorer"
                          Style="{StaticResource SegRadio}" Checked="StartupOpen_Checked"/>
           </StackPanel>
+
+          <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="4,12,4,8"/>
+
+          <Grid Margin="6,0,6,0">
+            <StackPanel>
+              <TextBlock Text="显示左侧文件夹栏" FontSize="{DynamicResource FontLg}"
+                         Foreground="{DynamicResource TextBrush}"/>
+              <TextBlock Text="标题栏 ◀/▶ 按钮也可快速隐藏或展开" FontSize="{DynamicResource FontSm}"
+                         Foreground="{DynamicResource DimBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+            <CheckBox x:Name="ShowTreeCheck" Style="{StaticResource ToggleSwitch}"
+                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                      Checked="ShowTree_Changed" Unchecked="ShowTree_Changed"/>
+          </Grid>
+          <Button Content="刷新全部面板" Style="{StaticResource FlatButton}" HorizontalAlignment="Left"
+                  Padding="8,3" Margin="6,10,0,0" FontSize="{DynamicResource FontSm}"
+                  Click="RefreshAll_Click" ToolTip="重新读取所有已打开文件夹的内容"/>
         </StackPanel>
         </ScrollViewer>
       </Border>

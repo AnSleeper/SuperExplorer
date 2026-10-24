@@ -583,10 +583,16 @@ namespace SuperExplorer.Controls
         {
             if (FindAncestor<Button>(e.OriginalSource as DependencyObject) != null) return;
 
-            var node = TreeList.SelectedItem as FolderNode;
-            if (node == null || string.IsNullOrEmpty(node.FullPath)) return;
+            // 支持 Ctrl/Shift 多选后双击批量打开（上限由主窗口控制并提示）
+            var nodes = TreeList.SelectedItems.Cast<FolderNode>()
+                .Where(n => n != null && !string.IsNullOrEmpty(n.FullPath))
+                .ToList();
 
-            FolderOpenRequested?.Invoke(node.FullPath);
+            if (nodes.Count == 0) return;
+
+            foreach (var node in nodes)
+                FolderOpenRequested?.Invoke(node.FullPath);
+
             e.Handled = true;
         }
 

@@ -154,6 +154,7 @@
 
     <ListBox x:Name="TreeList" Grid.Row="4" Background="Transparent" BorderThickness="0"
              ItemContainerStyle="{StaticResource TreeItem}"
+             SelectionMode="Extended"
              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
              ScrollViewer.VerticalScrollBarVisibility="Auto"
              VirtualizingPanel.IsVirtualizing="True"

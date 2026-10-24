@@ -19,7 +19,8 @@
             Height="{Binding ActualWidth, RelativeSource={RelativeSource Self}}"
             Background="{DynamicResource Panel2Brush}"
             BorderBrush="{DynamicResource BorderBrush}"
-            BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+            BorderThickness="1" CornerRadius="8" ClipToBounds="True"
+            AllowDrop="True" DragOver="Bd_DragOver" DragLeave="Bd_DragLeave" Drop="Bd_Drop">
       <Grid>
         <TextBlock x:Name="Placeholder" HorizontalAlignment="Center" VerticalAlignment="Center"
                    FontSize="{DynamicResource FontSm}" Foreground="{DynamicResource DimBrush}" Text=""/>

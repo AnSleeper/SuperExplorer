@@ -22,6 +22,24 @@ namespace SuperExplorer.Controls
         public static readonly RoutedEvent SelectedEvent = EventManager.RegisterRoutedEvent(
             "Selected", RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(TileView));
 
+        public static readonly RoutedEvent FolderDropRequestedEvent = EventManager.RegisterRoutedEvent(
+            "FolderDropRequested", RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(TileView));
+
+        /// <summary>携带拖拽原始数据的路由参数，用于「拖到文件夹缩略图上移入该文件夹」。</summary>
+        public class TileDropEventArgs : RoutedEventArgs
+        {
+            public IDataObject Data { get; private set; }
+            public DragDropKeyStates KeyStates { get; private set; }
+
+            public TileDropEventArgs(RoutedEvent routedEvent, object source,
+                IDataObject data, DragDropKeyStates keyStates)
+                : base(routedEvent, source)
+            {
+                Data = data;
+                KeyStates = keyStates;
+            }
+        }
+
         public static readonly DependencyProperty IsSelectedProperty = DependencyProperty.Register(
             "IsSelected", typeof(bool), typeof(TileView),
             new PropertyMetadata(false, OnSelectedChanged));
@@ -110,6 +128,66 @@ namespace SuperExplorer.Controls
                 Bd.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
                 Bd.BorderThickness = new Thickness(1);
             }
+        }
+
+        // ---------- 作为拖放目标：文件/文件夹拖到文件夹缩略图上 = 移入该文件夹 ----------
+
+        private bool _dropHighlighted;
+
+        private bool CanAcceptTileDrop(IDataObject data)
+        {
+            var entry = DataContext as FileEntry;
+            if (entry == null || entry.Kind != EntryKind.Folder) return false;
+            if (data == null) return false;
+            if (!data.GetDataPresent("SuperExplorer.FileEntry") &&
+                !data.GetDataPresent(DataFormats.FileDrop)) return false;
+            return true;
+        }
+
+        private void SetDropHighlight(bool on)
+        {
+            if (Bd == null || _dropHighlighted == on) return;
+            _dropHighlighted = on;
+            if (on)
+            {
+                Bd.SetResourceReference(Border.BorderBrushProperty, "AccentBrush");
+                Bd.BorderThickness = new Thickness(2);
+            }
+            else
+            {
+                ApplySelection();
+            }
+        }
+
+        private void Bd_DragOver(object sender, DragEventArgs e)
+        {
+            if (CanAcceptTileDrop(e.Data))
+            {
+                SetDropHighlight(true);
+                e.Effects = (e.KeyStates & DragDropKeyStates.ControlKey) != 0
+                    ? DragDropEffects.Copy
+                    : DragDropEffects.Move;
+            }
+            else
+            {
+                SetDropHighlight(false);
+                e.Effects = DragDropEffects.None;
+            }
+            e.Handled = true;
+        }
+
+        private void Bd_DragLeave(object sender, DragEventArgs e)
+        {
+            SetDropHighlight(false);
+        }
+
+        private void Bd_Drop(object sender, DragEventArgs e)
+        {
+            SetDropHighlight(false);
+            if (!CanAcceptTileDrop(e.Data)) return;
+
+            RaiseEvent(new TileDropEventArgs(FolderDropRequestedEvent, this, e.Data, e.KeyStates));
+            e.Handled = true;
         }
 
         private void RequestThumbIfNeeded()

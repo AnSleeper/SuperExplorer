@@ -33,6 +33,7 @@ namespace SuperExplorer.Controls
         public event Action<FolderPanel, FileEntry> DeleteRequested;
         public event Action<FolderPanel, FileEntry> LocateRequested;
         public event Action<FolderPanel, List<FileEntry>, bool> FilesDropped;
+        public event Action<FolderPanel, string, List<FileEntry>, bool> FilesDroppedInto;
         public event Action<FolderPanel, List<string>> ExternalFolderDropped;
         public event Action<FolderPanel> FavoriteToggled;
         public event Action<FolderPanel, FolderPanel, bool> PanelDropped;
@@ -89,6 +90,62 @@ namespace SuperExplorer.Controls
             };
 
             Grid.NewFolderRequested += CreateNewFolder;
+
+            // 文件/文件夹拖到文件夹缩略图上：移入该文件夹（而不是当前面板的文件夹）
+            AddHandler(TileView.FolderDropRequestedEvent, new RoutedEventHandler(OnTileFolderDrop));
+        }
+
+        private void OnTileFolderDrop(object sender, RoutedEventArgs e)
+        {
+            var args = e as TileView.TileDropEventArgs;
+            var tile = args == null ? null : args.OriginalSource as TileView;
+            var target = tile == null ? null : tile.DataContext as FileEntry;
+            if (args == null || target == null || target.Kind != EntryKind.Folder) return;
+
+            e.Handled = true;
+
+            // 复用面板的拖放数据提取：内部 FileEntry 或系统 FileDrop
+            var entries = ExtractEntries(args.Data);
+            if (entries.Count == 0) return;
+
+            var filtered = new List<FileEntry>();
+            foreach (var en in entries)
+            {
+                // 已经在目标文件夹里的不动；文件夹不能移进自己的子目录
+                if (FileSystemService.SameFolder(Path.GetDirectoryName(en.FullPath), target.FullPath)) continue;
+                if (en.Kind == EntryKind.Folder &&
+                    FileSystemService.IsSubPathOf(target.FullPath, en.FullPath)) continue;
+                filtered.Add(en);
+            }
+            if (filtered.Count == 0) return;
+
+            bool copy = (args.KeyStates & DragDropKeyStates.ControlKey) != 0;
+            FilesDroppedInto?.Invoke(this, target.FullPath, filtered, copy);
+        }
+
+        private static List<FileEntry> ExtractEntries(IDataObject data)
+        {
+            var list = new List<FileEntry>();
+            if (data == null) return list;
+
+            if (data.GetDataPresent("SuperExplorer.FileEntry"))
+            {
+                var entry = data.GetData("SuperExplorer.FileEntry") as FileEntry;
+                if (entry != null) list.Add(entry);
+            }
+            else if (data.GetDataPresent(DataFormats.FileDrop))
+            {
+                var paths = data.GetData(DataFormats.FileDrop) as string[];
+                if (paths != null)
+                {
+                    foreach (var p in paths)
+                    {
+                        var entry = FileSystemService.EntryFromPath(p);
+                        if (entry != null) list.Add(entry);
+                    }
+                }
+            }
+            return list;
         }
 
         public void BeginRename()
@@ -233,6 +290,9 @@ namespace SuperExplorer.Controls
             bool same = string.Equals(path, _lastLoadedPath, StringComparison.OrdinalIgnoreCase);
             _lastLoadedPath = path;
 
+            FileSystemService.ApplySort(entries,
+                SettingsService.Current.SortBy ?? "name", SettingsService.Current.SortAsc);
+
             Grid.SetItems(entries, same);
             UpdateMeta(entries);
         }
@@ -270,6 +330,9 @@ namespace SuperExplorer.Controls
             }
 
             if (cts.IsCancellationRequested) return;
+
+            FileSystemService.ApplySort(list,
+                SettingsService.Current.SortBy ?? "name", SettingsService.Current.SortAsc);
 
             Grid.SetItems(list, false);
             MetaText.Text = "搜索「" + t + "」：" + list.Count + " 项" +
