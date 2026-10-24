@@ -307,7 +307,7 @@
                       Checked="TakeOver_Changed" Unchecked="TakeOver_Changed"/>
           </Grid>
 
-          <TextBlock Text="启动时打开（接管开启后生效）" FontSize="{DynamicResource FontSm}" FontWeight="SemiBold"
+          <TextBlock Text="启动时打开（资源管理器有文件夹窗口时）" FontSize="{DynamicResource FontSm}" FontWeight="SemiBold"
                      Foreground="{DynamicResource DimBrush}" Margin="6,12,0,4"/>
           <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="StartupAskRadio" GroupName="StartupOpen" Content="询问我" Tag="ask"

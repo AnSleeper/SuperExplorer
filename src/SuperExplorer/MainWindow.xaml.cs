@@ -782,9 +782,27 @@ namespace SuperExplorer
             SettingsService.Current.TakeOverExplorer = on;
             SettingsService.Save();
             ExplorerTakeoverService.Apply(on);
-            Toast(on
-                ? "已接管：双击文件夹将用本程序打开（已打开的其他程序不受影响）"
-                : "已恢复系统默认资源管理器打开文件夹");
+
+            if (on)
+            {
+                Toast("已接管：双击文件夹将用本程序打开（已打开的其他程序不受影响）");
+            }
+            else
+            {
+                // 关闭接管时，「启动时打开=接管已打开的」联动切回询问，避免用户不解
+                if (string.Equals(SettingsService.Current.StartupOpen, "explorer",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    SettingsService.Current.StartupOpen = "ask";
+                    SettingsService.Save();
+                    StartupAskRadio.IsChecked = true;
+                    Toast("已恢复系统默认资源管理器打开文件夹；「启动时打开」已切回「询问我」");
+                }
+                else
+                {
+                    Toast("已恢复系统默认资源管理器打开文件夹");
+                }
+            }
         }
 
         // ---------- 搜索 ----------
@@ -1019,10 +1037,12 @@ namespace SuperExplorer
         {
             try
             {
-                if (!SettingsService.Current.TakeOverExplorer) return;
-
-                // 自愈：exe 挪动过就刷新注册表里的路径
-                ExplorerTakeoverService.Apply(true);
+                // 「启动时打开」独立于接管开关：只要资源管理器里有文件夹窗口就可接管
+                if (SettingsService.Current.TakeOverExplorer)
+                {
+                    // 自愈：exe 挪动过就刷新注册表里的路径
+                    ExplorerTakeoverService.Apply(true);
+                }
 
                 var paths = ExplorerWindowService.GetOpenFolderPaths();
                 if (paths.Count == 0) return;
