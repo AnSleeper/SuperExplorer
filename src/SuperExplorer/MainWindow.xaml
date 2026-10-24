@@ -32,6 +32,22 @@
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
           <Border Background="{DynamicResource Panel2Brush}"
                   BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                  CornerRadius="7" Padding="8,3" Margin="0,0,12,0" VerticalAlignment="Center">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="190"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock x:Name="SearchHint" Text="搜索当前文件夹 · Ctrl+F" IsHitTestVisible="False"
+                         FontSize="{DynamicResource FontSm}" Foreground="{DynamicResource DimBrush}"
+                         VerticalAlignment="Center"/>
+              <TextBox x:Name="SearchBox" Background="Transparent" BorderThickness="0"
+                       Foreground="{DynamicResource TextBrush}" FontSize="{DynamicResource FontSm}"
+                       VerticalContentAlignment="Center"
+                       TextChanged="SearchBox_TextChanged" KeyDown="SearchBox_KeyDown"/>
+            </Grid>
+          </Border>
+          <Border Background="{DynamicResource Panel2Brush}"
+                  BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                   CornerRadius="7" Padding="2">
             <StackPanel Orientation="Horizontal">
               <RadioButton x:Name="RowLayoutBtn" GroupName="Layout" Content="并排"
@@ -65,7 +81,8 @@
                     Cursor="SizeWE" DragCompleted="TreeSplitter_DragCompleted"/>
 
       <Grid Grid.Column="2">
-        <Grid x:Name="WorkspaceHost" Margin="12"/>
+        <Grid x:Name="WorkspaceHost" Margin="12" AllowDrop="True"
+              DragOver="Workspace_DragOver" Drop="Workspace_Drop"/>
         <TextBlock x:Name="EmptyHint"
                    Text="从左侧双击一个文件夹，它会在这里打开&#10;可以同时打开多个，并排或网格排列"
                    HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -90,7 +107,8 @@
            Placement="Bottom" HorizontalOffset="-100" VerticalOffset="6" StaysOpen="False">
       <Border Background="{DynamicResource Panel3Brush}"
               BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
-              CornerRadius="10" Padding="14" Width="360" Margin="0,0,0,6">
+              CornerRadius="10" Padding="14" Width="380" Margin="0,0,0,6">
+        <ScrollViewer MaxHeight="620" VerticalScrollBarVisibility="Auto">
         <StackPanel>
           <TextBlock Text="设置" FontSize="{DynamicResource FontSm}" FontWeight="SemiBold"
                      Foreground="{DynamicResource DimBrush}" Margin="6,2,0,8"/>
@@ -199,7 +217,55 @@
 
           <TextBlock Text="撤销栈保留 50 步" FontSize="{DynamicResource FontSm}"
                      Foreground="{DynamicResource DimBrush}" Margin="6,12,0,2"/>
+
+          <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="4,12,4,8"/>
+
+          <TextBlock Text="拖入文件夹时" FontSize="{DynamicResource FontSm}" FontWeight="SemiBold"
+                     Foreground="{DynamicResource DimBrush}" Margin="6,0,0,4"/>
+          <StackPanel Orientation="Horizontal">
+            <RadioButton x:Name="DropAskRadio" GroupName="FolderDrop" Content="询问我" Tag="ask"
+                         Style="{StaticResource SegRadio}" Checked="FolderDrop_Checked"/>
+            <RadioButton x:Name="DropOpenRadio" GroupName="FolderDrop" Content="直接打开" Tag="open"
+                         Style="{StaticResource SegRadio}" Checked="FolderDrop_Checked"/>
+            <RadioButton x:Name="DropCopyRadio" GroupName="FolderDrop" Content="复制进去" Tag="copy"
+                         Style="{StaticResource SegRadio}" Checked="FolderDrop_Checked"/>
+          </StackPanel>
+
+          <TextBlock Text="关闭窗口时" FontSize="{DynamicResource FontSm}" FontWeight="SemiBold"
+                     Foreground="{DynamicResource DimBrush}" Margin="6,12,0,4"/>
+          <StackPanel Orientation="Horizontal">
+            <RadioButton x:Name="CloseMinRadio" GroupName="CloseAction" Content="最小化到托盘" Tag="min"
+                         Style="{StaticResource SegRadio}" Checked="CloseAction_Checked"/>
+            <RadioButton x:Name="CloseExitRadio" GroupName="CloseAction" Content="直接退出" Tag="exit"
+                         Style="{StaticResource SegRadio}" Checked="CloseAction_Checked"/>
+          </StackPanel>
+
+          <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="4,12,4,8"/>
+
+          <Grid Margin="6,0,6,0">
+            <StackPanel>
+              <TextBlock Text="接管文件夹打开" FontSize="{DynamicResource FontLg}"
+                         Foreground="{DynamicResource TextBrush}"/>
+              <TextBlock Text="双击文件夹时用本程序打开（需重启其他程序后生效）&#10;关闭开关即恢复系统默认" FontSize="{DynamicResource FontSm}"
+                         Foreground="{DynamicResource DimBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+            <CheckBox x:Name="TakeOverCheck" Style="{StaticResource ToggleSwitch}"
+                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                      Checked="TakeOver_Changed" Unchecked="TakeOver_Changed"/>
+          </Grid>
+
+          <TextBlock Text="启动时打开（接管开启后生效）" FontSize="{DynamicResource FontSm}" FontWeight="SemiBold"
+                     Foreground="{DynamicResource DimBrush}" Margin="6,12,0,4"/>
+          <StackPanel Orientation="Horizontal">
+            <RadioButton x:Name="StartupAskRadio" GroupName="StartupOpen" Content="询问我" Tag="ask"
+                         Style="{StaticResource SegRadio}" Checked="StartupOpen_Checked"/>
+            <RadioButton x:Name="StartupLastRadio" GroupName="StartupOpen" Content="上次的文件夹" Tag="last"
+                         Style="{StaticResource SegRadio}" Checked="StartupOpen_Checked"/>
+            <RadioButton x:Name="StartupExpRadio" GroupName="StartupOpen" Content="资源管理器已打开的" Tag="explorer"
+                         Style="{StaticResource SegRadio}" Checked="StartupOpen_Checked"/>
+          </StackPanel>
         </StackPanel>
+        </ScrollViewer>
       </Border>
     </Popup>
 

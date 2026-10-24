@@ -4,11 +4,23 @@ namespace SuperExplorer.Models
 {
     public class AppSettings
     {
-        public string Theme { get; set; } = "Pink";
+        public string Theme { get; set; } = "Mono";
         public string Layout { get; set; } = "row";
         public double TileSize { get; set; } = 140;
         public int FontStep { get; set; }
         public bool ConfirmDelete { get; set; } = true;
+
+        // 拖入文件夹：ask=弹窗询问 open=作为面板打开 copy=复制到当前文件夹
+        public string FolderDropAction { get; set; } = "ask";
+
+        // 启动时（接管开启且资源管理器有文件夹窗口）：ask=询问 last=恢复上次 explorer=接管已打开
+        public string StartupOpen { get; set; } = "ask";
+
+        // 接管系统文件夹打开（HKCU 注册表方式，关闭时自动还原系统默认）
+        public bool TakeOverExplorer { get; set; }
+
+        // 关闭窗口：true=最小化到托盘 false=直接退出
+        public bool MinimizeOnClose { get; set; } = true;
 
         public List<string> Favorites { get; set; } = new List<string>();
         public List<string> OpenFolders { get; set; } = new List<string>();

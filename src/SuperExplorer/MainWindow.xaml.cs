@@ -33,10 +33,16 @@ namespace SuperExplorer
         private bool _ready;
         private bool _busy;
         private bool _relayoutQueued;
+        private bool _reallyExit;
 
-        public MainWindow()
+        private readonly string _initialFolder;
+        private readonly DispatcherTimer _searchDebounce;
+        private System.Windows.Forms.NotifyIcon _tray;
+
+        public MainWindow(string initialFolder = null)
         {
             InitializeComponent();
+            _initialFolder = initialFolder;
 
             SettingsService.Load();
             ThemeService.Apply(SettingsService.Current.Theme);
@@ -55,11 +61,33 @@ namespace SuperExplorer
             BuildWorkspace();
             UpdateStatus();
 
+            // 命令行 / 第二实例转来的「打开文件夹」请求
+            if (!string.IsNullOrEmpty(_initialFolder))
+            {
+                var p = _initialFolder;
+                Dispatcher.BeginInvoke(new Action(() => OpenFolder(p)),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
+            }
+
             PreviewKeyDown += OnKeyDown;
             Closing += (s, e) =>
             {
+                if (SettingsService.Current.MinimizeOnClose && !_reallyExit)
+                {
+                    e.Cancel = true;
+                    Tree.SaveExpandedState();
+                    SaveOpenFolders();
+                    Hide();
+                    return;
+                }
+
                 Tree.SaveExpandedState();
                 SaveOpenFolders();
+            };
+            Closed += (s, e) =>
+            {
+                DisposeTray();
+                Application.Current.Shutdown();
             };
 
             SettingsPopup.Opened += (s, e) =>
@@ -73,7 +101,20 @@ namespace SuperExplorer
             // 工作区尺寸变化后所有面板重新度量，避免旧卡片残留或错位
             WorkspaceHost.SizeChanged += (s, e) => QueueRelayoutAll();
 
+            _searchDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+            _searchDebounce.Tick += (s, e) =>
+            {
+                _searchDebounce.Stop();
+                RunActiveSearch();
+            };
+
+            InitTray();
+
             _ready = true;
+
+            // 启动接管：等界面就绪后再询问，避免挡住首帧
+            Dispatcher.BeginInvoke(new Action(StartupAdoption),
+                System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
         [DllImport("dwmapi.dll")]
@@ -115,15 +156,30 @@ namespace SuperExplorer
             TreeColumn.Width = new GridLength(treeWidth);
             if (TreeWidthValueText != null) TreeWidthValueText.Text = (int)treeWidth + " px";
 
-            switch ((s.Theme ?? "Pink").ToLowerInvariant())
+            switch ((s.Theme ?? "Mono").ToLowerInvariant())
             {
                 case "violet": ThemeViolet.IsChecked = true; break;
                 case "cyan": ThemeCyan.IsChecked = true; break;
                 case "green": ThemeGreen.IsChecked = true; break;
                 case "amber": ThemeAmber.IsChecked = true; break;
-                case "mono": ThemeMono.IsChecked = true; break;
-                default: ThemePink.IsChecked = true; break;
+                case "pink": ThemePink.IsChecked = true; break;
+                default: ThemeMono.IsChecked = true; break;
             }
+
+            string drop = string.IsNullOrEmpty(s.FolderDropAction) ? "ask" : s.FolderDropAction;
+            DropAskRadio.IsChecked = drop == "ask";
+            DropOpenRadio.IsChecked = drop == "open";
+            DropCopyRadio.IsChecked = drop == "copy";
+
+            CloseMinRadio.IsChecked = s.MinimizeOnClose;
+            CloseExitRadio.IsChecked = !s.MinimizeOnClose;
+
+            TakeOverCheck.IsChecked = s.TakeOverExplorer;
+
+            string so = string.IsNullOrEmpty(s.StartupOpen) ? "ask" : s.StartupOpen;
+            StartupAskRadio.IsChecked = so == "ask";
+            StartupLastRadio.IsChecked = so == "last";
+            StartupExpRadio.IsChecked = so == "explorer";
         }
 
         private void RestorePanels()
@@ -156,6 +212,7 @@ namespace SuperExplorer
             panel.DeleteRequested += (p, entry) => DeleteEntry(p, entry);
             panel.LocateRequested += (p, entry) => FileSystemService.LocateInExplorer(entry.FullPath);
             panel.FilesDropped += (p, entries, copy) => { _ = TransferAsync(entries, p.FolderPath, copy); };
+            panel.ExternalFolderDropped += (p, dirs) => HandleExternalFolderDrop(dirs);
             panel.PanelDropped += ReorderPanels;
             panel.Notified += Toast;
             panel.FavoriteToggled += p =>
@@ -604,6 +661,304 @@ namespace SuperExplorer
             Toast(on ? "删除前会弹出确认" : "删除将直接执行（仍进回收站）");
         }
 
+        private void FolderDrop_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!_ready) return;
+            var rb = sender as RadioButton;
+            if (rb == null) return;
+            SettingsService.Current.FolderDropAction = (rb.Tag as string) ?? "ask";
+            SettingsService.Save();
+        }
+
+        private void CloseAction_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!_ready) return;
+            var rb = sender as RadioButton;
+            if (rb == null) return;
+            SettingsService.Current.MinimizeOnClose = (rb.Tag as string) != "exit";
+            SettingsService.Save();
+        }
+
+        private void StartupOpen_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!_ready) return;
+            var rb = sender as RadioButton;
+            if (rb == null) return;
+            SettingsService.Current.StartupOpen = (rb.Tag as string) ?? "ask";
+            SettingsService.Save();
+        }
+
+        private void TakeOver_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!_ready) return;
+            bool on = TakeOverCheck.IsChecked == true;
+            SettingsService.Current.TakeOverExplorer = on;
+            SettingsService.Save();
+            ExplorerTakeoverService.Apply(on);
+            Toast(on
+                ? "已接管：双击文件夹将用本程序打开（已打开的其他程序不受影响）"
+                : "已恢复系统默认资源管理器打开文件夹");
+        }
+
+        // ---------- 搜索 ----------
+
+        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            SearchHint.Visibility = SearchBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+            _searchDebounce.Stop();
+            _searchDebounce.Start();
+        }
+
+        private void SearchBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                _searchDebounce.Stop();
+                RunActiveSearch();
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                SearchBox.Clear();
+                if (_active != null) _active.ClearSearch();
+            }
+        }
+
+        private void RunActiveSearch()
+        {
+            var term = SearchBox.Text;
+
+            if (term.Trim().Length == 0)
+            {
+                if (_active != null) _active.ClearSearch();
+                return;
+            }
+
+            if (_active == null)
+            {
+                Toast("先打开一个文件夹面板，搜索它的子目录");
+                return;
+            }
+
+            _active.RunSearch(term);
+        }
+
+        // ---------- 外部文件夹拖入 ----------
+
+        private void HandleExternalFolderDrop(List<string> dirs)
+        {
+            if (dirs == null || dirs.Count == 0) return;
+
+            string action = SettingsService.Current.FolderDropAction;
+            if (string.IsNullOrEmpty(action)) action = "ask";
+
+            if (action == "open")
+            {
+                OpenDroppedFolders(dirs);
+                return;
+            }
+
+            if (action == "copy")
+            {
+                CopyDroppedFolders(dirs);
+                return;
+            }
+
+            var dlg = new ChoiceDialog(
+                "拖入了 " + dirs.Count + " 个文件夹",
+                new[] { "复制到当前文件夹", "作为面板打开" },
+                dirs.Count == 1 ? dirs[0] : string.Join("\n", dirs.Take(3).ToArray()) + (dirs.Count > 3 ? "\n…" : ""))
+            { Owner = this };
+
+            if (dlg.ShowDialog() != true) return;
+            if (dlg.Selected == 0) CopyDroppedFolders(dirs);
+            else OpenDroppedFolders(dirs);
+        }
+
+        private void CopyDroppedFolders(List<string> dirs)
+        {
+            if (_active == null)
+            {
+                Toast("先打开一个文件夹面板");
+                return;
+            }
+            var entries = new List<FileEntry>();
+            foreach (var d in dirs)
+            {
+                var entry = FileSystemService.EntryFromPath(d);
+                if (entry != null) entries.Add(entry);
+            }
+            _ = TransferAsync(entries, _active.FolderPath, true);
+        }
+
+        private void OpenDroppedFolders(List<string> dirs)
+        {
+            foreach (var d in dirs)
+            {
+                if (_panels.Count >= MaxPanels)
+                {
+                    Toast("最多同时打开 " + MaxPanels + " 个文件夹");
+                    break;
+                }
+                OpenFolder(d);
+            }
+        }
+
+        private static List<string> GetExternalFolders(IDataObject data)
+        {
+            var list = new List<string>();
+            if (data == null) return list;
+            if (data.GetDataPresent("SuperExplorer.FileEntry") ||
+                data.GetDataPresent("SuperExplorer.Panel")) return list;
+            if (!data.GetDataPresent(DataFormats.FileDrop)) return list;
+
+            var paths = data.GetData(DataFormats.FileDrop) as string[];
+            if (paths == null) return list;
+
+            foreach (var p in paths)
+            {
+                try { if (Directory.Exists(p)) list.Add(p); }
+                catch { }
+            }
+            return list;
+        }
+
+        private void Workspace_DragOver(object sender, DragEventArgs e)
+        {
+            if (GetExternalFolders(e.Data).Count > 0)
+            {
+                e.Effects = DragDropEffects.Copy;
+                e.Handled = true;
+                return;
+            }
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void Workspace_Drop(object sender, DragEventArgs e)
+        {
+            var dirs = GetExternalFolders(e.Data);
+            if (dirs.Count == 0) return;
+
+            // 空工作区直接打开；已有面板则与拖到面板上一样走询问/默认动作
+            if (_panels.Count == 0) OpenDroppedFolders(dirs);
+            else HandleExternalFolderDrop(dirs);
+
+            e.Handled = true;
+        }
+
+        // ---------- 托盘与窗口生命周期 ----------
+
+        private void InitTray()
+        {
+            try
+            {
+                _tray = new System.Windows.Forms.NotifyIcon
+                {
+                    Text = "超级资源管理器",
+                    Visible = true,
+                    Icon = LoadTrayIcon()
+                };
+
+                var menu = new System.Windows.Forms.ContextMenuStrip();
+                menu.Items.Add("打开主窗口", null, (s, e2) => ShowFromTray());
+                menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+                menu.Items.Add("退出", null, (s, e2) => ExitApp());
+                _tray.ContextMenuStrip = menu;
+                _tray.DoubleClick += (s, e2) => ShowFromTray();
+            }
+            catch { _tray = null; }
+        }
+
+        private static System.Drawing.Icon LoadTrayIcon()
+        {
+            try
+            {
+                var sri = Application.GetResourceStream(
+                    new Uri("pack://application:,,,/app.ico"));
+                if (sri != null) return new System.Drawing.Icon(sri.Stream);
+            }
+            catch { }
+            return System.Drawing.SystemIcons.Application;
+        }
+
+        private void ShowFromTray()
+        {
+            Show();
+            if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+            Activate();
+        }
+
+        /// <summary>真正退出程序（托盘菜单用；关闭按钮默认是最小化到托盘）。</summary>
+        public void ExitApp()
+        {
+            _reallyExit = true;
+            Close();
+        }
+
+        private void DisposeTray()
+        {
+            if (_tray == null) return;
+            try { _tray.Visible = false; _tray.Dispose(); }
+            catch { }
+            _tray = null;
+        }
+
+        /// <summary>第二实例 / 接管启动转来的激活请求：弹到前台并打开文件夹。</summary>
+        public void ActivateFromOutside(string folder)
+        {
+            ShowFromTray();
+            if (!string.IsNullOrEmpty(folder)) OpenFolder(folder);
+        }
+
+        // ---------- 启动时接管已打开的资源管理器窗口 ----------
+
+        private void StartupAdoption()
+        {
+            try
+            {
+                if (!SettingsService.Current.TakeOverExplorer) return;
+
+                // 自愈：exe 挪动过就刷新注册表里的路径
+                ExplorerTakeoverService.Apply(true);
+
+                var paths = ExplorerWindowService.GetOpenFolderPaths();
+                if (paths.Count == 0) return;
+
+                string mode = SettingsService.Current.StartupOpen;
+                if (string.IsNullOrEmpty(mode)) mode = "ask";
+                if (mode == "last") return;
+
+                if (mode == "explorer")
+                {
+                    AdoptExplorerWindows(paths);
+                    return;
+                }
+
+                var dlg = new ChoiceDialog(
+                    "检测到资源管理器打开了 " + paths.Count + " 个文件夹",
+                    new[] { "恢复上次的文件夹", "接管这些文件夹" },
+                    string.Join("\n", paths.Take(3).ToArray()) + (paths.Count > 3 ? "\n…" : ""))
+                { Owner = this };
+
+                if (dlg.ShowDialog() == true && dlg.Selected == 1)
+                    AdoptExplorerWindows(paths);
+            }
+            catch { }
+        }
+
+        private void AdoptExplorerWindows(List<string> paths)
+        {
+            foreach (var p in paths)
+            {
+                if (_panels.Count >= MaxPanels) break;
+                OpenFolder(p);
+            }
+            ExplorerWindowService.CloseFolderWindows(paths);
+            Toast("已接管 " + paths.Count + " 个资源管理器窗口");
+        }
+
         // ---------- 快捷键 ----------
 
         private void OnKeyDown(object sender, KeyEventArgs e)
@@ -634,7 +989,13 @@ namespace SuperExplorer
             bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
             if (!ctrl) return;
 
-            if (e.Key == Key.Z)
+            if (e.Key == Key.F)
+            {
+                e.Handled = true;
+                SearchBox.Focus();
+                SearchBox.SelectAll();
+            }
+            else if (e.Key == Key.Z)
             {
                 e.Handled = true;
                 _ = UndoAsync();

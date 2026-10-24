@@ -33,6 +33,7 @@ namespace SuperExplorer.Controls
         public event Action<FolderPanel, FileEntry> DeleteRequested;
         public event Action<FolderPanel, FileEntry> LocateRequested;
         public event Action<FolderPanel, List<FileEntry>, bool> FilesDropped;
+        public event Action<FolderPanel, List<string>> ExternalFolderDropped;
         public event Action<FolderPanel> FavoriteToggled;
         public event Action<FolderPanel, FolderPanel, bool> PanelDropped;
         public event Action<string> Notified;
@@ -209,6 +210,11 @@ namespace SuperExplorer.Controls
         {
             int token = ++_loadToken;
             var path = FolderPath;
+
+            // 切回正常浏览会清掉进行中的搜索
+
+            _searchCts?.Cancel();
+
             MetaText.Text = "加载中…";
 
             List<FileEntry> entries;
@@ -229,6 +235,53 @@ namespace SuperExplorer.Controls
 
             Grid.SetItems(entries, same);
             UpdateMeta(entries);
+        }
+
+        // ---------- 搜索（当前面板文件夹内递归） ----------
+
+        private System.Threading.CancellationTokenSource _searchCts;
+
+        public async void RunSearch(string term)
+        {
+            var t = (term ?? "").Trim();
+            if (t.Length == 0)
+            {
+                ClearSearch();
+                return;
+            }
+
+            _searchCts?.Cancel();
+            var cts = new System.Threading.CancellationTokenSource();
+            _searchCts = cts;
+
+
+            var root = FolderPath;
+            MetaText.Text = "正在搜索「" + t + "」…";
+
+            List<FileEntry> list;
+            try
+            {
+                list = await System.Threading.Tasks.Task.Run(() =>
+                    FileSystemService.SearchEntries(root, t, 2000, 10, cts.Token));
+            }
+            catch
+            {
+                list = new List<FileEntry>();
+            }
+
+            if (cts.IsCancellationRequested) return;
+
+            Grid.SetItems(list, false);
+            MetaText.Text = "搜索「" + t + "」：" + list.Count + " 项" +
+                            (list.Count >= 2000 ? "（已达上限）" : "，Esc 清除");
+        }
+
+        public void ClearSearch()
+        {
+
+            _searchCts?.Cancel();
+            _searchCts = null;
+            _ = ReloadAsync();
         }
 
         private void UpdateMeta(List<FileEntry> entries)
@@ -436,6 +489,24 @@ namespace SuperExplorer.Controls
             else if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 var paths = e.Data.GetData(DataFormats.FileDrop) as string[];
+
+                // 从外部（系统资源管理器等）拖入的全是文件夹：交给上层决定「复制进去 / 作为面板打开」
+                var dirs = new List<string>();
+                if (paths != null)
+                {
+                    foreach (var p in paths)
+                    {
+                        try { if (Directory.Exists(p)) dirs.Add(p); }
+                        catch { }
+                    }
+                }
+                if (dirs.Count > 0 && dirs.Count == (paths == null ? 0 : paths.Length))
+                {
+                    ExternalFolderDropped?.Invoke(this, dirs);
+                    e.Handled = true;
+                    return;
+                }
+
                 if (paths != null)
                 {
                     foreach (var p in paths)
