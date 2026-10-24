@@ -25,6 +25,17 @@ namespace SuperExplorer.Controls
         private readonly HashSet<FileEntry> _selectionSet = new HashSet<FileEntry>();
         private int _anchor = -1;
 
+        // 「延迟收敛为单选」：普通按住多选成员时不清空，
+        // 双击时间窗内发生拖拽/双击则取消收敛，否则到点收敛（资源管理器同款手感）
+        private FileEntry _pendingSingle;
+        private System.Windows.Threading.DispatcherTimer _pendingTimer;
+
+        // 橡皮筋框选
+        private bool _marqueeActive;
+        private bool _marqueeAdd;
+        private Point _marqueeStart;
+        private HashSet<FileEntry> _marqueeBase;
+
         private double _tileSize = 140;
         private double _cellW = 140;
         private double _cellH = 176;
@@ -53,14 +64,133 @@ namespace SuperExplorer.Controls
             SizeChanged += (s, e) => { MeasureCells(); UpdateWindow(true); };
             Loaded += (s, e) => { MeasureCells(); UpdateWindow(true); };
 
-            // 点在空白处（不是任何卡片上）清空选择
+            // 空白处按下：清空选择；按住拖动则进入橡皮筋框选
             Scroll.PreviewMouseLeftButtonDown += OnBackgroundDown;
+            Scroll.PreviewMouseMove += OnMarqueeMove;
+            Scroll.PreviewMouseLeftButtonUp += OnMarqueeUp;
+
+            // 单击多选成员时的「延迟收敛为单选」：若随后发生拖拽或双击则取消
+            _pendingTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(
+                    Math.Max(200, System.Windows.Forms.SystemInformation.DoubleClickTime))
+            };
+            _pendingTimer.Tick += (s, e) =>
+            {
+                _pendingTimer.Stop();
+                var entry = _pendingSingle;
+                _pendingSingle = null;
+                if (entry != null) SelectSingle(entry);
+            };
         }
 
         private void OnBackgroundDown(object sender, MouseButtonEventArgs e)
         {
-            if (FindAncestor<TileView>(e.OriginalSource as DependencyObject) == null)
-                ClearSelection();
+            if (FindAncestor<TileView>(e.OriginalSource as DependencyObject) != null) return;
+
+            CancelPendingSingle();
+
+            // Shift+空白拖动 = 累加框选；普通空白拖动 = 替换框选（先清空作为基准）
+            bool additive = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+            if (!additive) ClearSelectionQuiet();
+
+            _marqueeActive = true;
+            _marqueeAdd = additive;
+            _marqueeBase = additive ? new HashSet<FileEntry>(_selectionSet) : new HashSet<FileEntry>();
+            _marqueeStart = e.GetPosition(Spacer);
+            try { Scroll.CaptureMouse(); }
+            catch { }
+            e.Handled = true;
+        }
+
+        private void OnMarqueeMove(object sender, MouseEventArgs e)
+        {
+            if (!_marqueeActive) return;
+
+            var cur = e.GetPosition(Spacer);
+            var r = RectFrom(_marqueeStart, cur);
+            ShowMarquee(r);
+            ApplyMarquee(r);
+        }
+
+        private void OnMarqueeUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_marqueeActive) return;
+
+            _marqueeActive = false;
+            Marquee.Visibility = Visibility.Collapsed;
+            try { Scroll.ReleaseMouseCapture(); }
+            catch { }
+            SelectionChanged?.Invoke(SelectedEntry);
+        }
+
+        private static Rect RectFrom(Point a, Point b)
+        {
+            return new Rect(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y),
+                Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
+        }
+
+        private void ShowMarquee(Rect r)
+        {
+            Marquee.Visibility = Visibility.Visible;
+            Marquee.Width = Math.Max(0, r.Width);
+            Marquee.Height = Math.Max(0, r.Height);
+            Canvas.SetLeft(Marquee, r.X);
+            Canvas.SetTop(Marquee, r.Y);
+        }
+
+        /// <summary>把框选矩形换算为网格行列范围并套用到选择集。</summary>
+        private void ApplyMarquee(Rect r)
+        {
+            int c0 = ClampCol(ColAt(r.Left));
+            int c1 = ClampCol(ColAt(r.Right));
+            int r0 = ClampRow(RowAt(r.Top));
+            int r1 = ClampRow(RowAt(r.Bottom));
+
+            var target = new HashSet<FileEntry>(_marqueeBase);
+            if (_cols > 0)
+            {
+                for (int row = r0; row <= r1; row++)
+                {
+                    for (int col = c0; col <= c1; col++)
+                    {
+                        int idx = row * _cols + col;
+                        if (idx >= 0 && idx < _items.Count) target.Add(_items[idx]);
+                    }
+                }
+            }
+
+            foreach (var it in _selectionSet)
+                if (!target.Contains(it)) it.IsSelected = false;
+            foreach (var it in target)
+                if (!_selectionSet.Contains(it)) it.IsSelected = true;
+
+            _selectionSet.Clear();
+            foreach (var it in target) _selectionSet.Add(it);
+        }
+
+        private int ColAt(double x)
+        {
+            return x <= 0 ? 0 : (int)(x / (_cellW + Gap));
+        }
+
+        private int RowAt(double y)
+        {
+            return y <= 0 ? 0 : (int)(y / _rowH);
+        }
+
+        private int ClampCol(int c)
+        {
+            if (c < 0) c = 0;
+            if (_cols > 0 && c > _cols - 1) c = _cols - 1;
+            return c;
+        }
+
+        private int ClampRow(int r)
+        {
+            if (r < 0) r = 0;
+            if (_totalRows > 0 && r > _totalRows - 1) r = _totalRows - 1;
+            return r;
         }
 
         private static T FindAncestor<T>(DependencyObject d) where T : DependencyObject
@@ -121,6 +251,12 @@ namespace SuperExplorer.Controls
             _anchor = -1;
         }
 
+        private void CancelPendingSingle()
+        {
+            _pendingTimer.Stop();
+            _pendingSingle = null;
+        }
+
         private void SelectSingle(FileEntry entry)
         {
             ClearSelectionQuiet();
@@ -133,10 +269,12 @@ namespace SuperExplorer.Controls
             SelectionChanged?.Invoke(entry);
         }
 
-        /// <summary>卡片按下时的选择逻辑，按当前键盘修饰键决定单选 / 切换 / 范围。</summary>
+        /// <summary>卡片按下时的选择逻辑，按当前键盘修饰键决定单选 / 切换 / 范围 / 延迟收敛。</summary>
         private void HandleTileClick(FileEntry entry)
         {
             if (entry == null) return;
+
+            CancelPendingSingle();
 
             var mods = Keyboard.Modifiers;
             int idx = _items.IndexOf(entry);
@@ -169,7 +307,18 @@ namespace SuperExplorer.Controls
             }
             else
             {
-                SelectSingle(entry);
+                // 普通按下多选组中的成员：不立即清空——
+                // 随后拖拽 = 整组拖走、双击 = 整组打开；双击时间窗内无后续动作才收敛为单选
+                if (_selectionSet.Count > 1 && _selectionSet.Contains(entry))
+                {
+                    _pendingSingle = entry;
+                    _pendingTimer.Stop();
+                    _pendingTimer.Start();
+                }
+                else
+                {
+                    SelectSingle(entry);
+                }
             }
         }
 
@@ -395,6 +544,9 @@ namespace SuperExplorer.Controls
             };
             tile.OpenRequested += (s, e) =>
             {
+                // 双击进入打开流程，取消可能挂起的「收敛为单选」
+                CancelPendingSingle();
+
                 var entry = tile.DataContext as FileEntry;
                 if (entry == null) return;
 
@@ -426,6 +578,9 @@ namespace SuperExplorer.Controls
         /// </summary>
         private void StartTileDrag(TileView tile)
         {
+            // 拖拽即整组带走，取消挂起的「收敛为单选」
+            CancelPendingSingle();
+
             var anchor = tile.DataContext as FileEntry;
             if (anchor == null) return;
 

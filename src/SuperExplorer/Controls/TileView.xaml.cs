@@ -225,6 +225,9 @@ namespace SuperExplorer.Controls
 
         private void OnDown(object sender, MouseButtonEventArgs e)
         {
+            // 双击的第二下不再触发改选，保住多选状态（整组打开/整组拖拽都依赖它）
+            if (e.ClickCount >= 2) return;
+
             _dragStart = e.GetPosition(null);
             _dragging = false;
             RaiseEvent(new RoutedEventArgs(SelectedEvent, this));

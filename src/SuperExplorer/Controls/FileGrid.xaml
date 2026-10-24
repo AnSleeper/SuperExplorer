@@ -15,6 +15,10 @@
     </ScrollViewer.ContextMenu>
     <Canvas x:Name="Spacer" Height="0" Background="Transparent">
       <Canvas x:Name="Host" Width="0" Height="0"/>
+      <Rectangle x:Name="Marquee" Visibility="Collapsed" IsHitTestVisible="False"
+                 Fill="{DynamicResource AccentSoftBrush}"
+                 Stroke="{DynamicResource AccentBrush}" StrokeThickness="1"
+                 RadiusX="2" RadiusY="2"/>
     </Canvas>
   </ScrollViewer>
 </UserControl>
