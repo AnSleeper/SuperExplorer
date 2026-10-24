@@ -379,10 +379,126 @@ namespace SuperExplorer.Controls
 
         private void Fav_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ClickCount != 2) return;
             var node = (sender as FrameworkElement)?.DataContext as FolderNode;
+
+            // 单击记录起点用于拖拽排序；双击才打开
+            if (e.ClickCount == 1)
+            {
+                _favDragNode = node;
+                _favDragStart = e.GetPosition(null);
+                _favCanDrag = node != null && !string.IsNullOrEmpty(node.FullPath);
+            }
+            else
+            {
+                _favCanDrag = false;
+            }
+
+            if (e.ClickCount != 2) return;
             if (node != null && !string.IsNullOrEmpty(node.FullPath))
                 FolderOpenRequested?.Invoke(node.FullPath);
+        }
+
+        // ---------- 常用文件夹拖拽排序 ----------
+
+        private FolderNode _favDragNode;
+        private Point _favDragStart;
+        private bool _favCanDrag;
+        private Border _favHighlight;
+
+        private void FavRow_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_favCanDrag || _favDragNode == null || e.LeftButton != MouseButtonState.Pressed) return;
+
+            var p = e.GetPosition(null);
+            if (Math.Abs(p.X - _favDragStart.X) < 6 && Math.Abs(p.Y - _favDragStart.Y) < 6) return;
+
+            _favCanDrag = false;
+            try
+            {
+                var data = new DataObject("SuperExplorer.Favorite", _favDragNode.FullPath);
+                DragDrop.DoDragDrop((FrameworkElement)sender, data, DragDropEffects.Move);
+            }
+            catch { }
+            finally
+            {
+                ClearFavHighlight();
+                _favDragNode = null;
+            }
+        }
+
+        private bool IsFavoriteDrag(IDataObject data)
+        {
+            return data != null && data.GetDataPresent("SuperExplorer.Favorite");
+        }
+
+        private void HighlightFavRow(FrameworkElement row)
+        {
+            var border = row as Border;
+            if (border == null) return;
+            if (!ReferenceEquals(border, _favHighlight))
+            {
+                ClearFavHighlight();
+                _favHighlight = border;
+                border.Background = (Brush)Application.Current.Resources["AccentSoftBrush"];
+            }
+        }
+
+        private void ClearFavHighlight()
+        {
+            if (_favHighlight == null) return;
+            // 清掉本地值，恢复模板里悬停高亮的触发器
+            _favHighlight.ClearValue(Border.BackgroundProperty);
+            _favHighlight = null;
+        }
+
+        /// <summary>把常用项 src 移动到 target 的位置（插入到 target 前）。</summary>
+        private void MoveFavoriteTo(string src, string target)
+        {
+            var list = SettingsService.Current.Favorites;
+            int from = list.FindIndex(p => string.Equals(p, src, StringComparison.OrdinalIgnoreCase));
+            int to = list.FindIndex(p => string.Equals(p, target, StringComparison.OrdinalIgnoreCase));
+            if (from < 0 || to < 0 || from == to) return;
+
+            var item = list[from];
+            list.RemoveAt(from);
+            if (from < to) to--;
+            list.Insert(to, item);
+
+            SettingsService.Save();
+            RefreshFavorites();
+        }
+
+        private void MoveFavoriteToEnd(string src)
+        {
+            var list = SettingsService.Current.Favorites;
+            int from = list.FindIndex(p => string.Equals(p, src, StringComparison.OrdinalIgnoreCase));
+            if (from < 0 || from == list.Count - 1) return;
+
+            var item = list[from];
+            list.RemoveAt(from);
+            list.Add(item);
+
+            SettingsService.Save();
+            RefreshFavorites();
+        }
+
+        private void FavArea_DragOver(object sender, DragEventArgs e)
+        {
+            // 只接管常用项自身的拖拽（排序）；文件拖入仍由各行自己的目标逻辑处理
+            if (IsFavoriteDrag(e.Data))
+            {
+                ClearFavHighlight();
+                e.Effects = DragDropEffects.Move;
+                e.Handled = true;
+            }
+        }
+
+        private void FavArea_Drop(object sender, DragEventArgs e)
+        {
+            if (!IsFavoriteDrag(e.Data)) return;
+            var src = e.Data.GetData("SuperExplorer.Favorite") as string;
+            if (!string.IsNullOrEmpty(src)) MoveFavoriteToEnd(src);
+            e.Handled = true;
         }
 
         private void FavRemove_Click(object sender, RoutedEventArgs e)
@@ -585,6 +701,24 @@ namespace SuperExplorer.Controls
             var border = sender as FrameworkElement;
             var node = border == null ? null : border.DataContext as FolderNode;
 
+            // 常用项拖拽 = 排序：目标行高亮，拖到自身上无效
+            if (IsFavoriteDrag(e.Data))
+            {
+                var src = e.Data.GetData("SuperExplorer.Favorite") as string;
+                if (node != null && !string.Equals(node.FullPath, src, StringComparison.OrdinalIgnoreCase))
+                {
+                    HighlightFavRow(border);
+                    e.Effects = DragDropEffects.Move;
+                }
+                else
+                {
+                    ClearFavHighlight();
+                    e.Effects = DragDropEffects.None;
+                }
+                e.Handled = true;
+                return;
+            }
+
             if (!CanDrop(e.Data, node))
             {
                 e.Effects = DragDropEffects.None;
@@ -602,6 +736,20 @@ namespace SuperExplorer.Controls
         {
             var border = sender as FrameworkElement;
             var node = border == null ? null : border.DataContext as FolderNode;
+
+            if (IsFavoriteDrag(e.Data))
+            {
+                ClearFavHighlight();
+                var src = e.Data.GetData("SuperExplorer.Favorite") as string;
+                if (node != null && !string.IsNullOrEmpty(src) &&
+                    !string.Equals(node.FullPath, src, StringComparison.OrdinalIgnoreCase))
+                {
+                    MoveFavoriteTo(src, node.FullPath);
+                }
+                e.Handled = true;
+                return;
+            }
+
             if (!CanDrop(e.Data, node)) return;
 
             var entries = GetEntries(e.Data);

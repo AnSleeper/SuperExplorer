@@ -92,12 +92,12 @@
 
     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
-      <StackPanel Margin="8,0,8,8">
+      <StackPanel Margin="8,0,8,8" AllowDrop="True" DragOver="FavArea_DragOver" Drop="FavArea_Drop">
         <ItemsControl x:Name="FavList">
           <ItemsControl.ItemTemplate>
             <DataTemplate>
               <Border x:Name="Row" Background="Transparent" CornerRadius="6" Padding="8,5"
-                      Cursor="Hand" MouseLeftButtonDown="Fav_MouseDown"
+                      Cursor="Hand" MouseLeftButtonDown="Fav_MouseDown" MouseMove="FavRow_MouseMove"
                       AllowDrop="True" DragOver="Fav_DragOver" Drop="Fav_Drop"
                       ToolTip="{Binding FullPath}">
                 <Grid>
