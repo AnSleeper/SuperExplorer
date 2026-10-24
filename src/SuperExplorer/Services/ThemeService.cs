@@ -7,12 +7,12 @@ namespace SuperExplorer.Services
     {
         private static readonly string[] Names = { "Pink", "Violet", "Cyan", "Green", "Amber", "Mono" };
 
-        public static string Current { get; private set; } = "Pink";
+        public static string Current { get; private set; } = "Mono";
 
         public static void Apply(string name)
         {
-            if (string.IsNullOrEmpty(name)) name = "Pink";
-            if (Array.IndexOf(Names, name) < 0) name = "Pink";
+            if (string.IsNullOrEmpty(name)) name = "Mono";
+            if (Array.IndexOf(Names, name) < 0) name = "Mono";
 
             var app = Application.Current;
             if (app == null) return;

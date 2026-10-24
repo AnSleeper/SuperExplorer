@@ -177,6 +177,87 @@ namespace SuperExplorer.Services
             return list;
         }
 
+        // ---------- 递归搜索（当前面板范围，按需扫描不建索引） ----------
+
+        public static List<FileEntry> SearchEntries(string root, string term,
+            int maxResults, int maxDepth, System.Threading.CancellationToken ct)
+        {
+            var results = new List<FileEntry>();
+            if (string.IsNullOrEmpty(root) || string.IsNullOrEmpty(term)) return results;
+
+            try
+            {
+                WalkSearch(new DirectoryInfo(root), "", 0, term.Trim(), maxResults, maxDepth, ct, results);
+            }
+            catch (OperationCanceledException) { }
+            catch { }
+
+            return results;
+        }
+
+        private static void WalkSearch(DirectoryInfo dir, string rel, int depth, string term,
+            int maxResults, int maxDepth, System.Threading.CancellationToken ct, List<FileEntry> results)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (results.Count >= maxResults || depth > maxDepth) return;
+
+            FileSystemInfo[] infos;
+            try { infos = dir.GetFileSystemInfos(); }
+            catch { return; }
+
+            foreach (var info in infos)
+            {
+                if (results.Count >= maxResults) return;
+                try
+                {
+                    if ((info.Attributes & FileAttributes.Hidden) != 0) continue;
+
+                    var d = info as DirectoryInfo;
+                    if (d != null)
+                    {
+                        if (d.Name.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            results.Add(new FileEntry
+                            {
+                                Name = d.Name,
+                                FullPath = d.FullName,
+                                Kind = EntryKind.Folder,
+                                Modified = d.LastWriteTime,
+                                Ext = "",
+                                Meta = rel.Length == 0 ? "文件夹" : rel
+                            });
+                        }
+
+                        // 跳过链接目录，避免死循环与重复统计
+                        if ((d.Attributes & FileAttributes.ReparsePoint) == 0)
+                            WalkSearch(d, rel.Length == 0 ? d.Name : rel + "\\" + d.Name,
+                                depth + 1, term, maxResults, maxDepth, ct, results);
+                    }
+                    else
+                    {
+                        var f = (FileInfo)info;
+                        var kind = KindOf(f.Extension);
+                        if (kind == EntryKind.Other) continue;
+
+                        if (f.Name.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            results.Add(new FileEntry
+                            {
+                                Name = f.Name,
+                                FullPath = f.FullName,
+                                Kind = kind,
+                                Size = f.Length,
+                                Modified = f.LastWriteTime,
+                                Ext = f.Extension.TrimStart('.').ToUpperInvariant(),
+                                Meta = rel.Length == 0 ? FormatSize(f.Length) : rel
+                            });
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+
         private static string FormatSize(long size)
         {
             if (size < 1024) return size + " B";
