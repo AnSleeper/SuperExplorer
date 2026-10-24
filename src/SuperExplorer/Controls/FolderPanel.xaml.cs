@@ -291,7 +291,8 @@ namespace SuperExplorer.Controls
             _lastLoadedPath = path;
 
             FileSystemService.ApplySort(entries,
-                SettingsService.Current.SortBy ?? "name", SettingsService.Current.SortAsc);
+                SettingsService.Current.SortBy ?? "name", SettingsService.Current.SortAsc,
+                SettingsService.Current.SortFoldersFirst);
 
             Grid.SetItems(entries, same);
             UpdateMeta(entries);
@@ -332,7 +333,8 @@ namespace SuperExplorer.Controls
             if (cts.IsCancellationRequested) return;
 
             FileSystemService.ApplySort(list,
-                SettingsService.Current.SortBy ?? "name", SettingsService.Current.SortAsc);
+                SettingsService.Current.SortBy ?? "name", SettingsService.Current.SortAsc,
+                SettingsService.Current.SortFoldersFirst);
 
             Grid.SetItems(list, false);
             MetaText.Text = "搜索「" + t + "」：" + list.Count + " 项" +

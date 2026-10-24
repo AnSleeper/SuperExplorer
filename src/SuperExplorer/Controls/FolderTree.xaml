@@ -161,7 +161,7 @@
              VirtualizingPanel.VirtualizationMode="Recycling"
              ScrollViewer.CanContentScroll="True"
              AllowDrop="True" DragOver="Tree_DragOver" DragLeave="Tree_DragLeave" Drop="Tree_Drop"
-             MouseDoubleClick="Tree_DoubleClick" Margin="8,0,8,8">
+             PreviewMouseLeftButtonDown="TreeList_PreviewMouseLeftButtonDown" Margin="8,0,8,8">
       <ListBox.ItemTemplate>
         <DataTemplate>
           <Grid Height="30" Background="Transparent" Margin="{Binding Indent}">

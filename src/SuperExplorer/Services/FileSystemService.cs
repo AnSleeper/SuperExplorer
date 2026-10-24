@@ -259,15 +259,15 @@ namespace SuperExplorer.Services
         }
 
         /// <summary>
-        /// 面板内容排序：文件夹永远排在文件前面（内部按名称自然排序），
-        /// 文件按指定字段排，同名退化按自然名称排。纯内存操作，零额外开销。
+        /// 面板内容排序。foldersFirst=true 时文件夹整体排在文件前；
+        /// false 时文件夹与文件按同一字段混排（文件夹大小视为 0、类型为空）。
+        /// 纯内存操作，零额外开销。
         /// </summary>
-        public static void ApplySort(List<FileEntry> list, string sortBy, bool asc)
+        public static void ApplySort(List<FileEntry> list, string sortBy, bool asc, bool foldersFirst)
         {
             list.Sort((a, b) =>
             {
-                if (a.IsFolder != b.IsFolder) return a.IsFolder ? -1 : 1;
-                if (a.IsFolder) return NaturalComparer.Instance.Compare(a.Name, b.Name);
+                if (foldersFirst && a.IsFolder != b.IsFolder) return a.IsFolder ? -1 : 1;
 
                 int r;
                 switch (sortBy)
@@ -275,9 +275,9 @@ namespace SuperExplorer.Services
                     case "date": r = a.Modified.CompareTo(b.Modified); break;
                     case "type": r = string.CompareOrdinal(a.Ext ?? "", b.Ext ?? ""); break;
                     case "size": r = a.Size.CompareTo(b.Size); break;
-                    default: r = 0; break;
+                    default: r = NaturalComparer.Instance.Compare(a.Name, b.Name); break;
                 }
-                if (r == 0) r = NaturalComparer.Instance.Compare(a.Name, b.Name);
+                if (r == 0 && sortBy != "name") r = NaturalComparer.Instance.Compare(a.Name, b.Name);
                 return asc ? r : -r;
             });
         }

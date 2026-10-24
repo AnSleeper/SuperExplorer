@@ -131,8 +131,15 @@
                        Style="{StaticResource ThemeOption}" Checked="SortDir_Checked"/>
           <RadioButton x:Name="SortDescRadio" GroupName="SortDir" Content="递减" Tag="desc"
                        Style="{StaticResource ThemeOption}" Checked="SortDir_Checked"/>
-          <TextBlock Text="文件夹始终排在文件前面" FontSize="{DynamicResource FontXs}"
-                     Foreground="{DynamicResource DimBrush}" Margin="6,8,0,2"/>
+          <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="4,8,4,6"/>
+          <Grid Margin="6,0,6,0">
+            <TextBlock Text="文件夹排在文件前面" FontSize="{DynamicResource FontSm}"
+                       Foreground="{DynamicResource DimBrush}" VerticalAlignment="Center"/>
+            <CheckBox x:Name="SortFoldersFirstCheck" Style="{StaticResource ToggleSwitch}"
+                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                      Checked="SortFoldersFirst_Changed" Unchecked="SortFoldersFirst_Changed"
+                      ToolTip="关闭后文件夹与文件按所选字段混排"/>
+          </Grid>
         </StackPanel>
       </Border>
     </Popup>
@@ -235,6 +242,18 @@
                   Padding="8,3" Margin="6,6,0,0" FontSize="{DynamicResource FontSm}"
                   Click="ResetTreeWidth_Click"/>
 
+          <Grid Margin="6,10,6,0">
+            <StackPanel>
+              <TextBlock Text="显示左侧文件夹栏" FontSize="{DynamicResource FontLg}"
+                         Foreground="{DynamicResource TextBrush}"/>
+              <TextBlock Text="标题栏 ◀/▶ 按钮也可快速隐藏或展开" FontSize="{DynamicResource FontSm}"
+                         Foreground="{DynamicResource DimBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+            <CheckBox x:Name="ShowTreeCheck" Style="{StaticResource ToggleSwitch}"
+                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                      Checked="ShowTree_Changed" Unchecked="ShowTree_Changed"/>
+          </Grid>
+
           <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="4,12,4,8"/>
 
           <Grid Margin="6,0,6,0">
@@ -301,19 +320,8 @@
 
           <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="4,12,4,8"/>
 
-          <Grid Margin="6,0,6,0">
-            <StackPanel>
-              <TextBlock Text="显示左侧文件夹栏" FontSize="{DynamicResource FontLg}"
-                         Foreground="{DynamicResource TextBrush}"/>
-              <TextBlock Text="标题栏 ◀/▶ 按钮也可快速隐藏或展开" FontSize="{DynamicResource FontSm}"
-                         Foreground="{DynamicResource DimBrush}" Margin="0,2,0,0"/>
-            </StackPanel>
-            <CheckBox x:Name="ShowTreeCheck" Style="{StaticResource ToggleSwitch}"
-                      HorizontalAlignment="Right" VerticalAlignment="Center"
-                      Checked="ShowTree_Changed" Unchecked="ShowTree_Changed"/>
-          </Grid>
           <Button Content="刷新全部面板" Style="{StaticResource FlatButton}" HorizontalAlignment="Left"
-                  Padding="8,3" Margin="6,10,0,0" FontSize="{DynamicResource FontSm}"
+                  Padding="8,3" Margin="6,2,0,0" FontSize="{DynamicResource FontSm}"
                   Click="RefreshAll_Click" ToolTip="重新读取所有已打开文件夹的内容"/>
         </StackPanel>
         </ScrollViewer>

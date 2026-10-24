@@ -579,11 +579,16 @@ namespace SuperExplorer.Controls
             }
         }
 
-        private void Tree_DoubleClick(object sender, MouseButtonEventArgs e)
+        /// <summary>
+        /// 双击打开：在第二次按下时拦截列表默认的「单击改选」行为——
+        /// 否则 Extended 模式下第一下普通单击会把多选清成单选，导致必须按住 Ctrl 才能批量打开。
+        /// 拦截后直接读取当前多选并全部打开；单击选中、Ctrl/Shift 多选仍是原生行为。
+        /// </summary>
+        private void TreeList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            if (e.ClickCount != 2) return;
             if (FindAncestor<Button>(e.OriginalSource as DependencyObject) != null) return;
 
-            // 支持 Ctrl/Shift 多选后双击批量打开（上限由主窗口控制并提示）
             var nodes = TreeList.SelectedItems.Cast<FolderNode>()
                 .Where(n => n != null && !string.IsNullOrEmpty(n.FullPath))
                 .ToList();

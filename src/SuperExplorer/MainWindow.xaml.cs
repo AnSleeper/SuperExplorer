@@ -174,6 +174,7 @@ namespace SuperExplorer
             SortSizeRadio.IsChecked = sortBy == "size";
             SortAscRadio.IsChecked = s.SortAsc;
             SortDescRadio.IsChecked = !s.SortAsc;
+            SortFoldersFirstCheck.IsChecked = s.SortFoldersFirst;
 
             ShowTreeCheck.IsChecked = s.ShowTree;
             UpdateTreeChrome();
@@ -626,6 +627,14 @@ namespace SuperExplorer
             var rb = sender as RadioButton;
             if (rb == null) return;
             SettingsService.Current.SortAsc = (rb.Tag as string) != "desc";
+            SettingsService.Save();
+            foreach (var p in _panels) p.Refresh();
+        }
+
+        private void SortFoldersFirst_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!_ready) return;
+            SettingsService.Current.SortFoldersFirst = SortFoldersFirstCheck.IsChecked == true;
             SettingsService.Save();
             foreach (var p in _panels) p.Refresh();
         }
