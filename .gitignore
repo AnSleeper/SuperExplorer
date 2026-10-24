@@ -17,3 +17,6 @@ dist/
 # IDE
 .vs/
 *.user
+
+# 发布打包临时目录（release.ps1 产物）
+_publish_tmp/
