@@ -1404,13 +1404,14 @@ namespace SuperExplorer
 
             int okCount = 0;
             string lastFail = null;
+            var undoChildren = new List<UndoAction>();
             foreach (var entry in entries)
             {
                 bool ok = await Task.Run(() => FileSystemService.DeleteToRecycleBin(entry.FullPath));
                 if (ok)
                 {
                     okCount++;
-                    UndoService.Push(new UndoAction
+                    undoChildren.Add(new UndoAction
                     {
                         Kind = UndoKind.Delete,
                         SourcePath = entry.FullPath
@@ -1420,6 +1421,19 @@ namespace SuperExplorer
                 {
                     lastFail = entry.Name;
                 }
+            }
+
+            // 一次批量删除 = 一个整体撤销项，Ctrl+Z 一次全部还原
+            if (undoChildren.Count > 0)
+            {
+                UndoService.Push(undoChildren.Count == 1
+                    ? undoChildren[0]
+                    : new UndoAction
+                    {
+                        Kind = UndoKind.Composite,
+                        SourcePath = undoChildren[0].SourcePath,
+                        Children = undoChildren
+                    });
             }
 
             if (okCount > 0)
@@ -1489,6 +1503,10 @@ namespace SuperExplorer
                 if (skipped > 0)
                     Toast("已跳过 " + skipped + " 项（不存在 / 已在目标文件夹 / 非法移动）");
 
+                // 一次批量移动/复制 = 一个整体撤销项，Ctrl+Z 一次全部还原
+                var undoChildren = new List<UndoAction>();
+                int done = 0;
+
                 foreach (var entry in valid)
                 {
 
@@ -1498,12 +1516,13 @@ namespace SuperExplorer
                         {
                             var newPath = await Task.Run(() =>
                                 FileSystemService.CopyItem(entry.FullPath, destDir));
-                            UndoService.Push(new UndoAction
+                            undoChildren.Add(new UndoAction
                             {
                                 Kind = UndoKind.Copy,
                                 SourcePath = entry.FullPath,
                                 TargetPath = newPath
                             });
+                            done++;
                             Toast(entry.Name + " 复制成功");
                         }
                         catch (Exception ex)
@@ -1521,12 +1540,13 @@ namespace SuperExplorer
                     {
                         var newPath = await Task.Run(() =>
                             FileSystemService.MoveItem(entry.FullPath, destDir));
-                        UndoService.Push(new UndoAction
+                        undoChildren.Add(new UndoAction
                         {
                             Kind = UndoKind.Move,
                             SourcePath = entry.FullPath,
                             TargetPath = newPath
                         });
+                        done++;
                         Toast(crossVolume
                             ? entry.Name + " 移动成功"
                             : entry.Name + " 已移动");
@@ -1535,6 +1555,22 @@ namespace SuperExplorer
                     {
                         Toast(entry.Name + " 移动失败：" + ex.Message);
                     }
+                }
+
+                if (undoChildren.Count == 1)
+                {
+                    UndoService.Push(undoChildren[0]);
+                }
+                else if (undoChildren.Count > 1)
+                {
+                    UndoService.Push(new UndoAction
+                    {
+                        Kind = UndoKind.Composite,
+                        SourcePath = undoChildren[0].SourcePath,
+                        Children = undoChildren
+                    });
+                    if (done > 1)
+                        Toast(done + " 项已" + (copy ? "复制" : "移动") + "，Ctrl+Z 可整体撤销");
                 }
             }
             finally

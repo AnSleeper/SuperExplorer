@@ -68,6 +68,46 @@ namespace SuperExplorer.Services
         {
             try
             {
+                if (a.Kind == UndoKind.Composite)
+                {
+                    var children = a.Children;
+                    if (children == null || children.Count == 0)
+                        return UndoResult.Fail("空操作");
+
+                    // 按执行的相反顺序还原；部分失败时只保留失败项，再次 Ctrl+Z 续撤
+                    var failed = new List<UndoAction>();
+                    string firstErr = null;
+                    for (int i = children.Count - 1; i >= 0; i--)
+                    {
+                        var r = PerformSingle(children[i]);
+                        if (!r.Ok)
+                        {
+                            failed.Add(children[i]);
+                            if (firstErr == null) firstErr = r.Message;
+                        }
+                    }
+
+                    if (failed.Count == 0)
+                        return UndoResult.Success("已整体撤销（" + children.Count + " 项）：" + a.DisplayName);
+
+                    int okCount = children.Count - failed.Count;
+                    a.Children = failed;
+                    return UndoResult.Fail("整体撤销部分失败（成功 " + okCount + "/" + children.Count +
+                        "），再次 Ctrl+Z 重试剩余项" + (firstErr == null ? "" : "：" + firstErr));
+                }
+
+                return PerformSingle(a);
+            }
+            catch (Exception ex)
+            {
+                return UndoResult.Fail(ex.Message);
+            }
+        }
+
+        private static UndoResult PerformSingle(UndoAction a)
+        {
+            try
+            {
                 switch (a.Kind)
                 {
                     case UndoKind.Move:

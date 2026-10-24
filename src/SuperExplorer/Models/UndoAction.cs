@@ -10,7 +10,9 @@ namespace SuperExplorer.Models
         Delete,
         Rename,
         NewFolder,
-        BatchRename
+        BatchRename,
+        // 组合操作：一次批量动作（多选删除/移动/复制）整体入栈、整体撤销
+        Composite
     }
 
     public class UndoAction
