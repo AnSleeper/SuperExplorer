@@ -104,7 +104,7 @@
         <TextBlock x:Name="StatusLeft" FontSize="{DynamicResource FontSm}" Foreground="{DynamicResource DimBrush}"
                    VerticalAlignment="Center"/>
         <TextBlock x:Name="StatusRight"
-                   Text="拖动面板标题栏换位 · 拖分隔条调宽度 · Ctrl+Z 撤销 · Ctrl+C / Ctrl+V 复制粘贴"
+                   Text="拖动面板标题栏换位 · 拖分隔条调宽度 · Ctrl+Z 撤销 · Ctrl+C / Ctrl+X / Ctrl+V 复制 / 剪切 / 粘贴"
                    FontSize="{DynamicResource FontSm}" Foreground="{DynamicResource DimBrush}"
                    HorizontalAlignment="Right" VerticalAlignment="Center"/>
       </Grid>

@@ -277,6 +277,7 @@ namespace SuperExplorer.Controls
 
             ApplyKindVisual(e);
             ApplyRenaming();
+            ApplyCutVisual(e);
         }
 
         private void OnEntryChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -285,6 +286,14 @@ namespace SuperExplorer.Controls
                 ApplyKindVisual(DataContext as FileEntry);
             else if (e.PropertyName == "IsRenaming")
                 ApplyRenaming();
+            else if (e.PropertyName == "IsCut")
+                ApplyCutVisual(DataContext as FileEntry);
+        }
+
+        private void ApplyCutVisual(FileEntry entry)
+        {
+            if (Root == null) return;
+            Root.Opacity = entry != null && entry.IsCut ? 0.45 : 1.0;
         }
 
         private void ApplyRenaming()

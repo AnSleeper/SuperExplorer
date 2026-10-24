@@ -30,6 +30,7 @@ namespace SuperExplorer
         private List<double> _rowWeights = new List<double>();
 
         private readonly List<FileEntry> _clipboard = new List<FileEntry>();
+        private bool _clipboardCut;
         private bool _ready;
         private bool _busy;
         private bool _relayoutQueued;
@@ -1210,6 +1211,11 @@ namespace SuperExplorer
                 e.Handled = true;
                 CopySelection();
             }
+            else if (e.Key == Key.X)
+            {
+                e.Handled = true;
+                CutSelection();
+            }
             else if (e.Key == Key.V)
             {
                 e.Handled = true;
@@ -1231,6 +1237,8 @@ namespace SuperExplorer
                 return;
             }
 
+            UnmarkCutEntries();
+            _clipboardCut = false;
             _clipboard.Clear();
             _clipboard.AddRange(entries);
 
@@ -1264,6 +1272,45 @@ namespace SuperExplorer
             }
         }
 
+        private void UnmarkCutEntries()
+        {
+            foreach (var e in _clipboard)
+            {
+                if (e != null) e.IsCut = false;
+            }
+        }
+
+        private void CutSelection()
+        {
+            var entries = _active == null ? null : _active.SelectedEntries;
+            if (entries == null || entries.Count == 0)
+            {
+                Toast("先在面板里选中文件（可 Ctrl 多选）");
+                return;
+            }
+
+            UnmarkCutEntries();
+            _clipboard.Clear();
+            _clipboard.AddRange(entries);
+            _clipboardCut = true;
+            foreach (var e in entries) e.IsCut = true;
+
+            // 系统剪贴板同步写入：带「移动」首选效果标记，在资源管理器里粘贴即为移动
+            try
+            {
+                var data = new DataObject();
+                data.SetData(DataFormats.FileDrop, entries.Select(x => x.FullPath).ToArray());
+                var moveEffect = new System.IO.MemoryStream(BitConverter.GetBytes(2)); // DROPEFFECT_MOVE
+                data.SetData("Preferred DropEffect", moveEffect);
+                Clipboard.SetDataObject(data, true);
+            }
+            catch { }
+
+            Toast(entries.Count == 1
+                ? "已剪切：" + entries[0].Name + "（Ctrl+V 粘贴时移动过去）"
+                : "已剪切 " + entries.Count + " 项（Ctrl+V 粘贴时移动过去）");
+        }
+
         private void PasteIntoActive()
         {
             if (_clipboard.Count == 0)
@@ -1276,7 +1323,28 @@ namespace SuperExplorer
                 Toast("先打开一个文件夹面板");
                 return;
             }
-            _ = TransferAsync(_clipboard.ToList(), _active.FolderPath, true);
+
+            var snapshot = _clipboard.ToList();
+            bool cut = _clipboardCut;
+            _ = TransferAndConsumeAsync(snapshot, _active.FolderPath, !cut);
+        }
+
+        /// <summary>粘贴并消耗剪贴板：剪切是一次性的，粘贴完成后清空标记。</summary>
+        private async Task TransferAndConsumeAsync(List<FileEntry> entries, string destDir, bool copy)
+        {
+            try
+            {
+                await TransferAsync(entries, destDir, copy);
+            }
+            finally
+            {
+                foreach (var e in entries)
+                {
+                    if (e != null) e.IsCut = false;
+                }
+                _clipboard.Clear();
+                _clipboardCut = false;
+            }
         }
 
         private void DeleteSelected()

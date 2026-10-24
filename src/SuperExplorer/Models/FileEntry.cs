@@ -61,6 +61,18 @@ namespace SuperExplorer.Models
             }
         }
 
+        private bool _cut;
+        public bool IsCut
+        {
+            get { return _cut; }
+            set
+            {
+                if (_cut == value) return;
+                _cut = value;
+                OnPropertyChanged(nameof(IsCut));
+            }
+        }
+
         private BitmapSource _thumb;
 
         public BitmapSource Thumbnail
