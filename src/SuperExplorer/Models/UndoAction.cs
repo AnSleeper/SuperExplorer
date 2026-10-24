@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace SuperExplorer.Models
 {
@@ -8,7 +9,8 @@ namespace SuperExplorer.Models
         Copy,
         Delete,
         Rename,
-        NewFolder
+        NewFolder,
+        BatchRename
     }
 
     public class UndoAction
@@ -17,6 +19,9 @@ namespace SuperExplorer.Models
         public string SourcePath { get; set; }
         public string TargetPath { get; set; }
         public DateTime Time { get; set; } = DateTime.Now;
+
+        /// <summary>批量操作的子操作（如批量重命名的每一项），整体进撤销栈、整体撤销。</summary>
+        public List<UndoAction> Children { get; set; }
 
         public string DisplayName
         {

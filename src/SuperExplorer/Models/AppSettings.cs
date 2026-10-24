@@ -33,6 +33,10 @@ namespace SuperExplorer.Models
         // 是否显示左侧文件夹栏
         public bool ShowTree { get; set; } = true;
 
+        // 批量重命名的序号前后缀：格式 = 前缀 + 序号 + 后缀，默认 "(" 和 ")"，均可为空
+        public string BatchRenameNumPrefix { get; set; } = "(";
+        public string BatchRenameNumSuffix { get; set; } = ")";
+
         public List<string> Favorites { get; set; } = new List<string>();
         public List<string> OpenFolders { get; set; } = new List<string>();
 

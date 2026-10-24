@@ -119,6 +119,41 @@ namespace SuperExplorer.Services
                             return UndoResult.Success("已撤销重命名：" + a.DisplayName);
                         }
 
+                    case UndoKind.BatchRename:
+                        {
+                            var children = a.Children;
+                            if (children == null || children.Count == 0)
+                                return UndoResult.Fail("空操作");
+
+                            // 按改名的相反顺序还原：链式换名时先还原的后项会腾出名字给前项
+                            int ok = 0;
+                            string firstErr = null;
+                            for (int i = children.Count - 1; i >= 0; i--)
+                            {
+                                var c = children[i];
+                                if (!File.Exists(c.TargetPath) && !Directory.Exists(c.TargetPath))
+                                {
+                                    firstErr = firstErr ?? ("改名后的文件已不存在：" + c.TargetPath);
+                                    continue;
+                                }
+                                if (File.Exists(c.SourcePath) || Directory.Exists(c.SourcePath))
+                                {
+                                    firstErr = firstErr ?? ("原名称已被占用：" + c.SourcePath);
+                                    continue;
+                                }
+                                var err = FileSystemService.RenameItem(c.TargetPath, Path.GetFileName(c.SourcePath));
+                                if (err == null) ok++;
+                                else firstErr = firstErr ?? err;
+                            }
+
+                            if (ok == children.Count)
+                                return UndoResult.Success("已整体撤销批量重命名（" + children.Count + " 项）：" + a.DisplayName);
+
+                            return UndoResult.Fail("批量撤销部分失败（" + ok + "/" + children.Count +
+                                "），再次 Ctrl+Z 可重试剩余项" +
+                                (firstErr == null ? "" : "：" + firstErr));
+                        }
+
                     case UndoKind.NewFolder:
                         {
                             if (!Directory.Exists(a.SourcePath))

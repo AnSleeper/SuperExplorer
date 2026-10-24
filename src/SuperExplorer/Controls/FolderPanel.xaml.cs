@@ -191,9 +191,10 @@ namespace SuperExplorer.Controls
         }
 
         /// <summary>
-        /// 批量重命名（Windows 资源管理器规则）：被编辑的项使用基础名，
-        /// 其余按顺序「基础名 (1)」「基础名 (2)」…；每个文件保留自己的扩展名；
-        /// 目标名被占用时序号自动顺延；已改名腾出的旧名允许后续项使用。
+        /// 批量重命名：被编辑的项使用基础名，其余按「基础名 + 前缀 + 序号 + 后缀」编号
+        /// （前后缀默认 "(" ")"，可在设置中改，如 "_" + "" → 基础名_1）；
+        /// 每个文件保留自己的扩展名；目标名被占用时序号自动顺延；
+        /// 全部改动作为一个整体进入撤销栈（一次 Ctrl+Z 整体还原）。
         /// </summary>
         private void HandleBatchRename(IReadOnlyList<FileEntry> targets, FileEntry edited, string baseName)
         {
@@ -216,8 +217,15 @@ namespace SuperExplorer.Controls
                 return;
             }
 
+            var invalid = Path.GetInvalidFileNameChars();
+            string numPrefix = new string((SettingsService.Current.BatchRenameNumPrefix ?? "")
+                .Where(c => invalid.All(k => k != c)).ToArray());
+            string numSuffix = new string((SettingsService.Current.BatchRenameNumSuffix ?? "")
+                .Where(c => invalid.All(k => k != c)).ToArray());
+
             // 已成功改名腾出来的旧路径，后续项可以复用
             var freed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var undoChildren = new List<UndoAction>();
             int nextNum = 1;
             int ok = 0;
             string firstError = null;
@@ -233,7 +241,7 @@ namespace SuperExplorer.Controls
                 string targetPath = null;
                 while (true)
                 {
-                    var name = n == 0 ? baseName : baseName + " (" + n + ")";
+                    var name = n == 0 ? baseName : baseName + numPrefix + n + numSuffix;
                     if (ext.Length > 0 && !name.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
                         name += ext;
                     var candidate = Path.Combine(dir, name);
@@ -256,7 +264,7 @@ namespace SuperExplorer.Controls
                 {
                     ok++;
                     freed.Add(entry.FullPath);
-                    UndoService.Push(new UndoAction
+                    undoChildren.Add(new UndoAction
                     {
                         Kind = UndoKind.Rename,
                         SourcePath = entry.FullPath,
@@ -269,7 +277,17 @@ namespace SuperExplorer.Controls
                 }
             }
 
-            if (ok > 0) Notified?.Invoke("已重命名 " + ok + " 项（其余项同名自动加序号）");
+            if (undoChildren.Count > 0)
+            {
+                UndoService.Push(new UndoAction
+                {
+                    Kind = UndoKind.BatchRename,
+                    SourcePath = undoChildren[0].SourcePath,
+                    Children = undoChildren
+                });
+            }
+
+            if (ok > 0) Notified?.Invoke("已重命名 " + ok + " 项，Ctrl+Z 可整体撤销");
             if (firstError != null) Notified?.Invoke(firstError);
 
             _ = ReloadAsync();

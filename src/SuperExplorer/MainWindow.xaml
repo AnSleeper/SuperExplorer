@@ -268,6 +268,25 @@
                       Checked="ConfirmDelete_Changed" Unchecked="ConfirmDelete_Changed"/>
           </Grid>
 
+          <TextBlock Text="批量重命名序号" FontSize="{DynamicResource FontSm}" FontWeight="SemiBold"
+                     Foreground="{DynamicResource DimBrush}" Margin="6,12,0,4"/>
+          <StackPanel Orientation="Horizontal" Margin="6,0,6,0">
+            <TextBox x:Name="NumPrefixBox" Width="52" Padding="4,3" TextChanged="NumPrefix_TextChanged"
+                     Background="{DynamicResource Panel2Brush}" Foreground="{DynamicResource TextBrush}"
+                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                     FontSize="{DynamicResource FontSm}" VerticalContentAlignment="Center"
+                     ToolTip="序号前缀（可空）"/>
+            <TextBlock Text="序号" FontSize="{DynamicResource FontSm}" Foreground="{DynamicResource DimBrush}"
+                       VerticalAlignment="Center" Margin="6,0,6,0"/>
+            <TextBox x:Name="NumSuffixBox" Width="52" Padding="4,3" TextChanged="NumSuffix_TextChanged"
+                     Background="{DynamicResource Panel2Brush}" Foreground="{DynamicResource TextBrush}"
+                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                     FontSize="{DynamicResource FontSm}" VerticalContentAlignment="Center"
+                     ToolTip="序号后缀（可空）"/>
+          </StackPanel>
+          <TextBlock x:Name="NumPreviewText" FontSize="{DynamicResource FontSm}"
+                     Foreground="{DynamicResource AccentBrush}" Margin="6,4,0,0"/>
+
           <TextBlock Text="撤销栈保留 50 步" FontSize="{DynamicResource FontSm}"
                      Foreground="{DynamicResource DimBrush}" Margin="6,12,0,2"/>
 

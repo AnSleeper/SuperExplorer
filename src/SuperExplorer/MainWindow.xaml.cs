@@ -179,6 +179,10 @@ namespace SuperExplorer
             ShowTreeCheck.IsChecked = s.ShowTree;
             UpdateTreeChrome();
 
+            NumPrefixBox.Text = s.BatchRenameNumPrefix ?? "(";
+            NumSuffixBox.Text = s.BatchRenameNumSuffix ?? ")";
+            UpdateNumPreview();
+
             string drop = string.IsNullOrEmpty(s.FolderDropAction) ? "ask" : s.FolderDropAction;
             DropAskRadio.IsChecked = drop == "ask";
             DropOpenRadio.IsChecked = drop == "open";
@@ -746,6 +750,56 @@ namespace SuperExplorer
             SettingsService.Current.ConfirmDelete = on;
             SettingsService.Save();
             Toast(on ? "删除前会弹出确认" : "删除将直接执行（仍进回收站）");
+        }
+
+        // ---------- 批量重命名序号格式 ----------
+
+        private static string SanitizeNumFormat(string text)
+        {
+            var invalid = System.IO.Path.GetInvalidFileNameChars();
+            return new string((text ?? "").Where(c => invalid.All(k => k != c)).ToArray());
+        }
+
+        private void NumPrefix_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!_ready) return;
+
+            var clean = SanitizeNumFormat(NumPrefixBox.Text);
+            if (clean != NumPrefixBox.Text)
+            {
+                NumPrefixBox.Text = clean;
+                NumPrefixBox.SelectionStart = clean.Length;
+                return;
+            }
+
+            SettingsService.Current.BatchRenameNumPrefix = clean;
+            SettingsService.Save();
+            UpdateNumPreview();
+        }
+
+        private void NumSuffix_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!_ready) return;
+
+            var clean = SanitizeNumFormat(NumSuffixBox.Text);
+            if (clean != NumSuffixBox.Text)
+            {
+                NumSuffixBox.Text = clean;
+                NumSuffixBox.SelectionStart = clean.Length;
+                return;
+            }
+
+            SettingsService.Current.BatchRenameNumSuffix = clean;
+            SettingsService.Save();
+            UpdateNumPreview();
+        }
+
+        private void UpdateNumPreview()
+        {
+            var s = SettingsService.Current;
+            var p = s.BatchRenameNumPrefix ?? "";
+            var q = s.BatchRenameNumSuffix ?? "";
+            NumPreviewText.Text = "示例：基础名" + p + "1" + q + ".扩展名、基础名" + p + "2" + q + ".扩展名…";
         }
 
         private void FolderDrop_Checked(object sender, RoutedEventArgs e)
