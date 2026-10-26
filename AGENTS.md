@@ -11,7 +11,8 @@
 - `dist\` 是用户本机的部署目录，里面有用户个人数据（settings.json、日志），**不删除、不入库**（.gitignore 已排除）
 - 删除范围仅限 `bin/`、`obj/`，以及 `历史版本/` 里超出最近 3 个的旧 zip（`release.ps1` 会自动清，手动清也照这个口径）
 - **验证程序时禁止模拟鼠标/键盘**（会抢占用户前台）。只允许后台方式：向指定测试窗口发消息（SendMessage）、读日志、读文件
-- 本机到 GitHub 网络不稳：失败先重试几轮（间隔 15s），直连不通回退本地代理 `127.0.0.1:7897`，反之亦然
+- 本机到 GitHub 网络不稳：失败先重试几轮（间隔 15s），直连不通回退本地代理 `127.0.0.1:7897`，反之亦然。
+  **注意 shell 环境里有一套 `http_proxy/https_proxy=127.0.0.1:9551` 是失效的**（git 会报 `CONNECT tunnel failed, response 502` 或 schannel 中断），推送前先 `unset` 掉，或直接 `git -c http.proxy=http://127.0.0.1:7897 push`；`api.github.com` 直连可用
 
 ## 版本迭代流程
 
