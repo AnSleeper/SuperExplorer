@@ -43,7 +43,7 @@
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                 CornerRadius="7" Padding="8,3">
           <Grid>
-            <TextBlock x:Name="PathHint" Text="粘贴路径 · 回车打开（Ctrl+L）" IsHitTestVisible="False"
+            <TextBlock x:Name="PathHint" Text="粘贴路径 · 回车打开（Ctrl+L 聚焦）" IsHitTestVisible="False"
                        FontSize="{DynamicResource FontSm}" Foreground="{DynamicResource DimBrush}"
                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
             <TextBox x:Name="PathBox" Background="Transparent" BorderThickness="0"
