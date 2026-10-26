@@ -28,6 +28,13 @@ namespace SuperExplorer
             try { _ = typeof(System.Diagnostics.Tracing.EventSource).Assembly; }
             catch { }
 
+            // 同类问题：Popup / ToolTip 首次弹出时 WPF 会走
+            // PopupSecurityHelper.ForceMsaaToUiaBridge，按需加载 Accessibility 程序集，
+            // 单文件发布下同样偶发 FileNotFoundException（曾进 error.log 并弹错误框）。
+            // 程序集本身在包内，只是解析时机不对；启动时先取一次让它常驻，后续弹窗直接命中。
+            try { _ = typeof(Accessibility.IAccessible).Assembly; }
+            catch { }
+
             DispatcherUnhandledException += OnUnhandled;
             AppDomain.CurrentDomain.UnhandledException += (s, args) =>
             {

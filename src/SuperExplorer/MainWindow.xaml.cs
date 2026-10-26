@@ -189,6 +189,11 @@ namespace SuperExplorer
             DropOpenRadio.IsChecked = drop == "open";
             DropCopyRadio.IsChecked = drop == "copy";
 
+            string pathOpen = string.IsNullOrEmpty(s.PathOpenAction) ? "ask" : s.PathOpenAction;
+            PathAskRadio.IsChecked = pathOpen == "ask";
+            PathExplorerRadio.IsChecked = pathOpen == "explorer";
+            PathAppRadio.IsChecked = pathOpen == "app";
+
             CloseMinRadio.IsChecked = s.MinimizeOnClose;
             CloseExitRadio.IsChecked = !s.MinimizeOnClose;
 
@@ -261,18 +266,33 @@ namespace SuperExplorer
                 return;
             }
 
+            var panel = EnsurePanel(path);
+            if (panel == null) return;
+
+            SetActive(panel);
+            Tree.SelectPath(path);
+        }
+
+        /// <summary>
+        /// 找到或新建指向 path 的面板并返回；已到上限时提示并返回 null。
+        /// 只负责创建与布局，不动激活态，由调用方 SetActive。
+        /// </summary>
+        private FolderPanel EnsurePanel(string path)
+        {
+            var existing = _panels.FirstOrDefault(p => FileSystemService.SameFolder(p.FolderPath, path));
+            if (existing != null) return existing;
+
             if (_panels.Count >= MaxPanels)
             {
                 Toast("最多同时打开 " + MaxPanels + " 个文件夹");
-                return;
+                return null;
             }
 
             var panel = CreatePanel(path);
             _panels.Add(panel);
             BuildWorkspace();
-            SetActive(panel);
             SaveOpenFolders();
-            Tree.SelectPath(path);
+            return panel;
         }
 
         private void OnPanelClose(FolderPanel panel)
@@ -566,6 +586,227 @@ namespace SuperExplorer
             SettingsPopup.IsOpen = !SettingsPopup.IsOpen;
         }
 
+        // ---------- 顶栏路径直达 ----------
+
+        private void PathBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            PathHint.Visibility = PathBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void PathBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                SubmitPathInput();
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                PathBox.Clear();
+                FocusGrid();
+            }
+        }
+
+        /// <summary>
+        /// 补住普通 TextBox 粘不进来的那种剪贴板：
+        /// 在资源管理器里 Ctrl+C 一个文件/文件夹，剪贴板是 FileDrop 而非文本，
+        /// 原生粘贴会「什么都没发生」。这种情况取第一项路径填进去；
+        /// 纯文本剪贴板不拦截，继续走系统默认粘贴。
+        /// </summary>
+        private void PathBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.V || (Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
+
+            try
+            {
+                if (!Clipboard.ContainsFileDropList()) return;
+
+                var files = Clipboard.GetFileDropList();
+                if (files == null || files.Count == 0) return;
+
+                var first = files[0];
+                if (string.IsNullOrEmpty(first)) return;
+
+                PathBox.Text = first;
+                PathBox.CaretIndex = PathBox.Text.Length;
+                e.Handled = true;
+
+                if (files.Count > 1)
+                {
+                    int n = files.Count;
+                    Toast("剪贴板里有 " + n + " 项，已填入第一个；一次只能开一个");
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// 回车提交：校验路径 → 按设置询问或直接打开。
+        /// 路径不存在/格式不对时弹窗告知，输入内容保留方便改。
+        /// </summary>
+        private void SubmitPathInput()
+        {
+            string path, error;
+            if (!TryNormalizePath(PathBox.Text, out path, out error))
+            {
+                ShowPathError(error);
+                return;
+            }
+
+            bool isFile = File.Exists(path) && !Directory.Exists(path);
+
+            string action = SettingsService.Current.PathOpenAction;
+            if (string.IsNullOrEmpty(action)) action = "ask";
+
+            if (action == "ask")
+            {
+                var dlg = new ChoiceDialog(
+                    isFile ? "要如何打开这个文件？" : "要如何打开这个文件夹？",
+                    new[] { "在 Windows 资源管理器中打开", "在本程序中打开" },
+                    path) { Owner = this };
+
+                if (dlg.ShowDialog() != true) return;
+                action = dlg.Selected == 0 ? "explorer" : "app";
+            }
+
+            if (action == "explorer") OpenPathInExplorer(path, isFile);
+            else OpenPathInApp(path, isFile);
+
+            PathBox.Clear();
+            FocusGrid();
+        }
+
+        /// <summary>
+        /// 打开完把焦点还给窗口：焦点留在输入框里时，窗口级快捷键（Ctrl+Z / F5 / Delete）都会被跳过。
+        /// </summary>
+        private void FocusGrid()
+        {
+            try { Keyboard.ClearFocus(); }
+            catch { }
+        }
+
+        /// <summary>
+        /// 把粘贴进来的内容整理成绝对路径：
+        /// 去掉首尾空白与「复制为路径」加的引号、展开 %环境变量%、支持 file:/// URL、
+        /// 裸盘符补根反斜杠（E: → E:\）、多行只取第一行。
+        /// </summary>
+        private static bool TryNormalizePath(string input, out string path, out string error)
+        {
+            path = null;
+            error = null;
+
+            var text = (input ?? "").Trim();
+
+            // 一次粘贴多个路径时只认第一个，避免把换行一起丢给文件系统
+            int nl = text.IndexOfAny(new[] { '\r', '\n' });
+            if (nl >= 0) text = text.Substring(0, nl).Trim();
+
+            if (text.Length == 0)
+            {
+                error = "还没有输入路径";
+                return false;
+            }
+
+            // 资源管理器「复制为路径」带引号；有的终端会包两层
+            text = text.Trim('"', '\'', ' ');
+
+            if (text.StartsWith("file:///", StringComparison.OrdinalIgnoreCase))
+            {
+                try { text = new Uri(text).LocalPath; }
+                catch { }
+            }
+
+            try { text = Environment.ExpandEnvironmentVariables(text); }
+            catch { }
+
+            if (text.Length == 2 && char.IsLetter(text[0]) && text[1] == ':') text += "\\";
+
+            try { text = Path.GetFullPath(text); }
+            catch
+            {
+                error = "路径格式不正确：" + text;
+                return false;
+            }
+
+            if (Directory.Exists(text) || File.Exists(text))
+            {
+                path = text;
+                return true;
+            }
+
+            error = "路径不存在：" + text;
+            return false;
+        }
+
+        private void ShowPathError(string message)
+        {
+            var dlg = new ChoiceDialog(
+                "路径无效",
+                new[] { "知道了" },
+                (message ?? "") + "\n在资源管理器里 Shift+右键「复制为路径」，再回来按 Ctrl+L 粘贴最省事。")
+            { Owner = this };
+
+            dlg.ShowDialog();
+            PathBox.Focus();
+            PathBox.SelectAll();
+        }
+
+        private void OpenPathInExplorer(string path, bool isFile)
+        {
+            if (isFile) FileSystemService.LocateInExplorer(path);
+            else FileSystemService.OpenInExplorer(path);
+        }
+
+        private void OpenPathInApp(string path, bool isFile)
+        {
+            var dir = isFile ? Path.GetDirectoryName(path) : path;
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+            {
+                ShowPathError("找不到所在文件夹：" + dir);
+                return;
+            }
+
+            var panel = EnsurePanel(dir);
+            if (panel == null) return;
+
+            SetActive(panel);
+            Tree.SelectPath(dir);
+            if (isFile) panel.RevealFile(path);
+        }
+
+        /// <summary>
+        /// Ctrl+L 聚焦路径框：框为空时若剪贴板里正好是存在的路径就直接填进去，
+        /// 省掉一次 Ctrl+V。
+        /// </summary>
+        private void FocusPathBox()
+        {
+            if (PathBox.Text.Length == 0)
+            {
+                var text = TryGetClipboardPath();
+                if (text != null) PathBox.Text = text;
+            }
+
+            PathBox.Focus();
+            PathBox.SelectAll();
+        }
+
+        private static string TryGetClipboardPath()
+        {
+            try
+            {
+                if (!Clipboard.ContainsText()) return null;
+
+                var text = (Clipboard.GetText() ?? "").Trim();
+                if (text.Length == 0 || text.Length > 400) return null;
+
+                // 只接受「确实存在的路径」，否则普通文本也会被塞进输入框
+                string path, error;
+                return TryNormalizePath(text, out path, out error) ? text : null;
+            }
+            catch { return null; }
+        }
+
         private void TreeSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
         {
             double w = Math.Max(150, TreeColumn.ActualWidth);
@@ -809,6 +1050,15 @@ namespace SuperExplorer
             var rb = sender as RadioButton;
             if (rb == null) return;
             SettingsService.Current.FolderDropAction = (rb.Tag as string) ?? "ask";
+            SettingsService.Save();
+        }
+
+        private void PathOpen_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!_ready) return;
+            var rb = sender as RadioButton;
+            if (rb == null) return;
+            SettingsService.Current.PathOpenAction = (rb.Tag as string) ?? "ask";
             SettingsService.Save();
         }
 
@@ -1195,6 +1445,11 @@ namespace SuperExplorer
                 e.Handled = true;
                 SearchBox.Focus();
                 SearchBox.SelectAll();
+            }
+            else if (e.Key == Key.L)
+            {
+                e.Handled = true;
+                FocusPathBox();
             }
             else if (e.Key == Key.A)
             {

@@ -408,6 +408,28 @@ namespace SuperExplorer.Controls
             Navigated?.Invoke(this);
         }
 
+        /// <summary>
+        /// 定位到某个文件：切到它所在目录、加载完再选中（顶栏路径直达用）。
+        /// </summary>
+        public void RevealFile(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath)) return;
+
+            var dir = Path.GetDirectoryName(filePath);
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
+
+            FolderPath = dir;
+            BuildCrumbs();
+            UpdateFavGlyph();
+            _ = RevealFileAsync(filePath);
+        }
+
+        private async System.Threading.Tasks.Task RevealFileAsync(string filePath)
+        {
+            await ReloadAsync();
+            Grid.SelectByPath(filePath);
+        }
+
         private async System.Threading.Tasks.Task ReloadAsync()
         {
             int token = ++_loadToken;

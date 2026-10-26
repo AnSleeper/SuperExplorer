@@ -18,5 +18,5 @@ dist/
 .vs/
 *.user
 
-# 发布打包临时目录（release.ps1 产物）
-_publish_tmp/
+# 发布打包输出（本地只留最近 3 个包）
+历史版本/

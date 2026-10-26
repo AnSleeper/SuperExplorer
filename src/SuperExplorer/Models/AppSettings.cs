@@ -13,6 +13,9 @@ namespace SuperExplorer.Models
         // 拖入文件夹：ask=弹窗询问 open=作为面板打开 copy=复制到当前文件夹
         public string FolderDropAction { get; set; } = "ask";
 
+        // 顶栏路径直达：ask=弹窗询问 explorer=Windows 资源管理器 app=本程序
+        public string PathOpenAction { get; set; } = "ask";
+
         // 启动时（接管开启且资源管理器有文件夹窗口）：ask=询问 last=恢复上次 explorer=接管已打开
         public string StartupOpen { get; set; } = "ask";
 

@@ -3,7 +3,7 @@
 #   powershell -ExecutionPolicy Bypass -File tools\release.ps1
 # 可选参数：
 #   -Notes "自定义发布说明"   不给则自动用 GitHub Compare API 生成
-# 流程：dotnet publish -> 打 zip -> 创建或更新 GitHub Release -> 上传附件
+# 流程：dotnet publish -> 打 zip（历史版本/ 只留最近 3 个） -> 创建或更新 GitHub Release -> 上传附件
 # 凭据取自 Windows 凭据管理器（git credential），无需手动配置。
 
 param([string]$Notes)
@@ -42,7 +42,7 @@ if (-not (Test-Path (Join-Path $pub 'SuperExplorer.exe'))) { throw "发布产物
 
 # ---------- 3. 打 zip（并校验完整性） ----------
 
-$outDir = Join-Path $root '_publish_tmp'
+$outDir = Join-Path $root '历史版本'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $zip = Join-Path $outDir $zipName
 if (Test-Path $zip) { Remove-Item $zip -Force }
@@ -157,6 +157,19 @@ if ($release) {
 
 $upUri = "https://uploads.github.com/repos/$slug/releases/$($release.id)/assets?name=$zipName"
 Invoke-Gh POST $upUri -InFile $zip -ContentType 'application/zip' | Out-Null
+
+# ---------- 9. 本地只保留最近 3 个包 ----------
+
+# 每个包约 60 MB，不清理会无限膨胀；GitHub Release 上仍保留全部历史版本。
+$keep = 3
+$localZips = @(Get-ChildItem -Path $outDir -Filter 'SuperExplorer-*-win-x64.zip' -File |
+               Sort-Object LastWriteTime -Descending)
+if ($localZips.Count -gt $keep) {
+    foreach ($old in ($localZips | Select-Object -Skip $keep)) {
+        Remove-Item $old.FullName -Force
+        Write-Host "  已清理本地旧包 $($old.Name)"
+    }
+}
 
 Write-Host ''
 Write-Host "== 完成 ✅ =="

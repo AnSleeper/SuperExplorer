@@ -21,7 +21,13 @@
     <Border Grid.Row="0" Background="{DynamicResource PanelBrush}"
             BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
       <Grid Margin="16,0">
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
           <Ellipse Width="8" Height="8" Fill="{DynamicResource AccentBrush}"/>
           <TextBlock Text="超级资源管理器" FontWeight="SemiBold" Margin="8,0,0,0"
                      VerticalAlignment="Center"/>
@@ -31,7 +37,24 @@
                   Margin="2,0,0,0" Click="ToggleTree_Click" ToolTip="隐藏 / 显示左侧文件夹栏"/>
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+        <!-- 路径直达：粘贴路径回车，按设置询问或直接打开 -->
+        <Border Grid.Column="1" Margin="16,0" MaxWidth="560" VerticalAlignment="Center"
+                Background="{DynamicResource Panel2Brush}"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                CornerRadius="7" Padding="8,3">
+          <Grid>
+            <TextBlock x:Name="PathHint" Text="粘贴路径 · 回车打开（Ctrl+L）" IsHitTestVisible="False"
+                       FontSize="{DynamicResource FontSm}" Foreground="{DynamicResource DimBrush}"
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+            <TextBox x:Name="PathBox" Background="Transparent" BorderThickness="0"
+                     Foreground="{DynamicResource TextBrush}" FontSize="{DynamicResource FontSm}"
+                     VerticalContentAlignment="Center"
+                     TextChanged="PathBox_TextChanged" KeyDown="PathBox_KeyDown"
+                     PreviewKeyDown="PathBox_PreviewKeyDown"/>
+          </Grid>
+        </Border>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
           <Button x:Name="RefreshBtn" Content="⟳" Style="{StaticResource IconButton}"
                   Width="28" Height="28" FontSize="16" Margin="0,0,10,0"
                   Click="RefreshAll_Click" ToolTip="刷新全部面板（F5 刷新当前面板）"/>
@@ -292,8 +315,19 @@
 
           <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="4,12,4,8"/>
 
-          <TextBlock Text="拖入文件夹时" FontSize="{DynamicResource FontSm}" FontWeight="SemiBold"
+          <TextBlock Text="顶栏输入路径回车时" FontSize="{DynamicResource FontSm}" FontWeight="SemiBold"
                      Foreground="{DynamicResource DimBrush}" Margin="6,0,0,4"/>
+          <StackPanel Orientation="Horizontal">
+            <RadioButton x:Name="PathAskRadio" GroupName="PathOpen" Content="询问我" Tag="ask"
+                         Style="{StaticResource SegRadio}" Checked="PathOpen_Checked"/>
+            <RadioButton x:Name="PathExplorerRadio" GroupName="PathOpen" Content="资源管理器" Tag="explorer"
+                         Style="{StaticResource SegRadio}" Checked="PathOpen_Checked"/>
+            <RadioButton x:Name="PathAppRadio" GroupName="PathOpen" Content="本程序" Tag="app"
+                         Style="{StaticResource SegRadio}" Checked="PathOpen_Checked"/>
+          </StackPanel>
+
+          <TextBlock Text="拖入文件夹时" FontSize="{DynamicResource FontSm}" FontWeight="SemiBold"
+                     Foreground="{DynamicResource DimBrush}" Margin="6,12,0,4"/>
           <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="DropAskRadio" GroupName="FolderDrop" Content="询问我" Tag="ask"
                          Style="{StaticResource SegRadio}" Checked="FolderDrop_Checked"/>
