@@ -137,8 +137,6 @@ namespace SuperExplorer
 
         private const int WM_HOTKEY = 0x0312;
         private const int HotkeyId = 0x5EC0;
-        private const uint MOD_ALT = 0x0001;
-        private const uint VK_Q = 0x51;
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -180,16 +178,104 @@ namespace SuperExplorer
             {
                 _hwndSource = System.Windows.Interop.HwndSource.FromHwnd(_hwnd);
                 if (_hwndSource != null) _hwndSource.AddHook(WndProc);
-                _hotkeyRegistered = RegisterHotKey(_hwnd, HotkeyId, MOD_ALT, VK_Q);
             }
             catch { }
 
-            // 被别的程序占了（截图/输入法工具很爱用 Alt+Q）只提示一次，不影响其他功能
+            ApplyHotkey();
+
+            // 被别的程序占了只提示一次，不影响其他功能；可在设置里换组合
             if (!_hotkeyRegistered)
             {
-                Dispatcher.BeginInvoke(new Action(() => Toast("Alt+Q 热键注册失败，可能被其他程序占用")),
+                var spec = SettingsService.Current.ActivateHotkey;
+                Dispatcher.BeginInvoke(new Action(() => Toast(spec + " 被其他程序占用，可在设置里换一个")),
                     System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             }
+        }
+
+        /// <summary>
+        /// 按设置里的文本重新注册热键：先注销旧的，再按新组合注册。
+        /// 注册失败时把 _hotkeyRegistered 置 false，由调用方提示。
+        /// </summary>
+        private void ApplyHotkey()
+        {
+            if (_hotkeyRegistered && _hwnd != IntPtr.Zero)
+            {
+                try { UnregisterHotKey(_hwnd, HotkeyId); } catch { }
+                _hotkeyRegistered = false;
+            }
+
+            if (_hwnd == IntPtr.Zero) return;
+
+            uint mods, vk;
+            string text;
+            var spec = SettingsService.Current.ActivateHotkey;
+
+            if (!HotkeyKeys.TryParse(spec, out mods, out vk, out text))
+            {
+                // 旧配置或手改坏了：回落到默认并写回去，别让热键静默失效
+                SettingsService.Current.ActivateHotkey = HotkeyKeys.DefaultSpec;
+                SettingsService.Save();
+                HotkeyKeys.TryParse(HotkeyKeys.DefaultSpec, out mods, out vk, out text);
+            }
+
+            if (HotkeyBox != null) HotkeyBox.Text = text;
+
+            try { _hotkeyRegistered = RegisterHotKey(_hwnd, HotkeyId, mods, vk); }
+            catch { _hotkeyRegistered = false; }
+        }
+
+        /// <summary>
+        /// 设置里的热键录制框：点进去直接按组合键改。
+        /// 只按修饰键不算；没有修饰键的组合拒绝——那种会把正常打字吃掉。
+        /// </summary>
+        private void HotkeyBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            e.Handled = true;
+
+            var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+            if (key == Key.None || key == Key.LeftCtrl || key == Key.RightCtrl ||
+                key == Key.LeftAlt || key == Key.RightAlt ||
+                key == Key.LeftShift || key == Key.RightShift ||
+                key == Key.LWin || key == Key.RWin)
+                return;
+
+            if (key == Key.Escape)
+            {
+                HotkeyBox.Text = SettingsService.Current.ActivateHotkey;
+                return;
+            }
+
+            var mods = HotkeyKeys.FromModifiers(Keyboard.Modifiers);
+            if (mods == 0)
+            {
+                Toast("至少要带一个修饰键（Ctrl / Alt / Shift / Win）");
+                return;
+            }
+
+            if (KeyInterop.VirtualKeyFromKey(key) == 0)
+            {
+                Toast("这个键不支持，换一个");
+                return;
+            }
+
+            var old = SettingsService.Current.ActivateHotkey;
+            var spec = HotkeyKeys.Format(mods, key);
+
+            SettingsService.Current.ActivateHotkey = spec;
+            ApplyHotkey();
+
+            if (!_hotkeyRegistered)
+            {
+                // 新组合被占用：退回去，别让用户以为设成功了
+                SettingsService.Current.ActivateHotkey = old;
+                ApplyHotkey();
+                Toast(spec + " 被其他程序占用，已保持 " + old);
+                return;
+            }
+
+            SettingsService.Save();
+            Toast("唤出热键已改为 " + spec);
         }
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -292,6 +378,8 @@ namespace SuperExplorer
 
             CloseMinRadio.IsChecked = s.MinimizeOnClose;
             CloseExitRadio.IsChecked = !s.MinimizeOnClose;
+
+            HotkeyBox.Text = string.IsNullOrEmpty(s.ActivateHotkey) ? HotkeyKeys.DefaultSpec : s.ActivateHotkey;
 
             TakeOverCheck.IsChecked = s.TakeOverExplorer;
 

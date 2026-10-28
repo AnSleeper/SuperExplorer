@@ -346,6 +346,24 @@
                          Style="{StaticResource SegRadio}" Checked="CloseAction_Checked"/>
           </StackPanel>
 
+          <Grid Margin="6,14,6,0">
+            <StackPanel>
+              <TextBlock Text="唤出窗口热键" FontSize="{DynamicResource FontLg}"
+                         Foreground="{DynamicResource TextBrush}"/>
+              <TextBlock Text="托盘或后台时按下即跳到最前；点框内直接按新组合键"
+                         FontSize="{DynamicResource FontSm}"
+                         Foreground="{DynamicResource DimBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+            <TextBox x:Name="HotkeyBox" Width="108" IsReadOnly="True" Cursor="Hand"
+                     HorizontalAlignment="Right" VerticalAlignment="Center"
+                     TextAlignment="Center" Padding="6,3"
+                     Background="{DynamicResource Panel2Brush}" Foreground="{DynamicResource AccentBrush}"
+                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                     FontSize="{DynamicResource FontSm}"
+                     PreviewKeyDown="HotkeyBox_PreviewKeyDown"
+                     ToolTip="至少带一个修饰键：Ctrl / Alt / Shift / Win"/>
+          </Grid>
+
           <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="4,12,4,8"/>
 
           <Grid Margin="6,0,6,0">
