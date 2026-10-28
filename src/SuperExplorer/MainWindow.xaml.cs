@@ -88,6 +88,17 @@ namespace SuperExplorer
             };
             Closed += (s, e) =>
             {
+                if (_hotkeyRegistered)
+                {
+                    try { UnregisterHotKey(_hwnd, HotkeyId); } catch { }
+                    _hotkeyRegistered = false;
+                }
+                if (_hwndSource != null)
+                {
+                    try { _hwndSource.RemoveHook(WndProc); } catch { }
+                    _hwndSource = null;
+                }
+
                 DisposeTray();
                 Application.Current.Shutdown();
             };
@@ -122,14 +133,99 @@ namespace SuperExplorer
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
+        // ---------- 全局热键：托盘 / 后台时把窗口唤到最前 ----------
+
+        private const int WM_HOTKEY = 0x0312;
+        private const int HotkeyId = 0x5EC0;
+        private const uint MOD_ALT = 0x0001;
+        private const uint VK_Q = 0x51;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr processId);
+
+        [DllImport("kernel32.dll")]
+        private static extern uint GetCurrentThreadId();
+
+        [DllImport("user32.dll")]
+        private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        private IntPtr _hwnd;
+        private System.Windows.Interop.HwndSource _hwndSource;
+        private bool _hotkeyRegistered;
+
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
             try
             {
-                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                _hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
                 int dark = 1;
-                DwmSetWindowAttribute(hwnd, 20, ref dark, sizeof(int));
+                DwmSetWindowAttribute(_hwnd, 20, ref dark, sizeof(int));
+            }
+            catch { }
+
+            try
+            {
+                _hwndSource = System.Windows.Interop.HwndSource.FromHwnd(_hwnd);
+                if (_hwndSource != null) _hwndSource.AddHook(WndProc);
+                _hotkeyRegistered = RegisterHotKey(_hwnd, HotkeyId, MOD_ALT, VK_Q);
+            }
+            catch { }
+
+            // 被别的程序占了（截图/输入法工具很爱用 Alt+Q）只提示一次，不影响其他功能
+            if (!_hotkeyRegistered)
+            {
+                Dispatcher.BeginInvoke(new Action(() => Toast("Alt+Q 热键注册失败，可能被其他程序占用")),
+                    System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            }
+        }
+
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_HOTKEY && wParam.ToInt32() == HotkeyId)
+            {
+                handled = true;
+                BringToFront();
+            }
+            return IntPtr.Zero;
+        }
+
+        /// <summary>托盘隐藏、最小化、被别的窗口盖住——三种情况都唤到最前。</summary>
+        private void BringToFront()
+        {
+            ShowFromTray();
+
+            try
+            {
+                // 热键触发时本进程不是前台，Windows 默认拒绝 SetForegroundWindow，
+                // 临时把输入队列挂到前台线程再抢，抢完立刻摘掉
+                uint fgThread = GetWindowThreadProcessId(GetForegroundWindow(), IntPtr.Zero);
+                uint myThread = GetCurrentThreadId();
+                bool attached = fgThread != 0 && fgThread != myThread &&
+                                AttachThreadInput(fgThread, myThread, true);
+                SetForegroundWindow(_hwnd);
+                if (attached) AttachThreadInput(fgThread, myThread, false);
+            }
+            catch { }
+
+            // 兜底：个别情况下仍被拒，用一次置顶切换把窗口顶上来
+            try
+            {
+                Topmost = true;
+                Topmost = false;
+                Activate();
             }
             catch { }
         }
@@ -1568,20 +1664,70 @@ namespace SuperExplorer
 
         private void PasteIntoActive()
         {
-            if (_clipboard.Count == 0)
-            {
-                Toast("剪贴板是空的");
-                return;
-            }
             if (_active == null)
             {
                 Toast("先打开一个文件夹面板");
                 return;
             }
 
-            var snapshot = _clipboard.ToList();
-            bool cut = _clipboardCut;
-            _ = TransferAndConsumeAsync(snapshot, _active.FolderPath, !cut);
+            // 程序内剪贴板优先：它带着剪切/复制语义和撤销记录
+            if (_clipboard.Count > 0)
+            {
+                var snapshot = _clipboard.ToList();
+                bool cut = _clipboardCut;
+                _ = TransferAndConsumeAsync(snapshot, _active.FolderPath, !cut);
+                return;
+            }
+
+            // 系统剪贴板兜底：在资源管理器里复制/剪切的文件，程序内的列表是感知不到的
+            bool move;
+            var external = ReadSystemClipboardEntries(out move);
+            if (external.Count == 0)
+            {
+                Toast("剪贴板里没有可粘贴的文件");
+                return;
+            }
+
+            Toast((move ? "正在移入 " : "正在复制 ") + external.Count + " 项…");
+            _ = TransferAsync(external, _active.FolderPath, !move);
+        }
+
+        /// <summary>
+        /// 读系统剪贴板里的文件列表。资源管理器「剪切」会额外写
+        /// Preferred DropEffect = 2（DROPEFFECT_MOVE），据此决定移动还是复制。
+        /// </summary>
+        private static List<FileEntry> ReadSystemClipboardEntries(out bool move)
+        {
+            move = false;
+            var list = new List<FileEntry>();
+
+            try
+            {
+                if (!Clipboard.ContainsFileDropList()) return list;
+
+                var files = Clipboard.GetFileDropList();
+                foreach (var p in files)
+                {
+                    if (string.IsNullOrEmpty(p)) continue;
+                    var entry = FileSystemService.EntryFromPath(p);
+                    if (entry != null) list.Add(entry);
+                }
+
+                var data = Clipboard.GetDataObject();
+                if (data != null && data.GetDataPresent("Preferred DropEffect"))
+                {
+                    var ms = data.GetData("Preferred DropEffect") as System.IO.MemoryStream;
+                    if (ms != null)
+                    {
+                        var buf = new byte[4];
+                        ms.Position = 0;
+                        if (ms.Read(buf, 0, 4) == 4) move = BitConverter.ToInt32(buf, 0) == 2;
+                    }
+                }
+            }
+            catch { }
+
+            return list;
         }
 
         /// <summary>粘贴并消耗剪贴板：剪切是一次性的，粘贴完成后清空标记。</summary>
