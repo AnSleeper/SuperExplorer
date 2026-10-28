@@ -283,9 +283,37 @@ namespace SuperExplorer
             if (msg == WM_HOTKEY && wParam.ToInt32() == HotkeyId)
             {
                 handled = true;
-                BringToFront();
+                ToggleWindow();
             }
             return IntPtr.Zero;
+        }
+
+        /// <summary>
+        /// 热键当开关用：窗口已经在最前就收进托盘，否则唤到最前。
+        /// 判据用 IsActive 而不是"可见"——被别的窗口盖住时按热键应该顶上来，
+        /// 而不是藏起来；有模态弹窗时 IsActive 为 false，也不会把弹窗连主人一起藏掉。
+        /// </summary>
+        private void ToggleWindow()
+        {
+            if (IsVisible && IsActive && WindowState != WindowState.Minimized)
+            {
+                HideToTray();
+                return;
+            }
+
+            BringToFront();
+        }
+
+        private void HideToTray()
+        {
+            try
+            {
+                // 和关闭按钮同一套收尾：记住树展开状态与打开的面板，下次启动原样恢复
+                Tree.SaveExpandedState();
+                SaveOpenFolders();
+                Hide();
+            }
+            catch { }
         }
 
         /// <summary>托盘隐藏、最小化、被别的窗口盖住——三种情况都唤到最前。</summary>
