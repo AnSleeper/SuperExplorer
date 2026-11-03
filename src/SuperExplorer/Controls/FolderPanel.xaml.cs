@@ -618,20 +618,50 @@ namespace SuperExplorer.Controls
             }
             _headerDown = e.GetPosition(this);
             _headerCanDrag = true;
+
+            // 按下就把鼠标抓在标题栏上：标题栏只有 28px 高，不抓握时指针稍微
+            // 往下移一点就离开元素，MouseMove 断流，阈值永远到不了，拖动起不来
+            try { HeaderBorder.CaptureMouse(); } catch { }
+        }
+
+        private void Header_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            _headerCanDrag = false;
+            ReleaseHeaderCapture();
         }
 
         private void Header_MouseMove(object sender, MouseEventArgs e)
         {
-            if (!_headerCanDrag || e.LeftButton != MouseButtonState.Pressed) return;
+            if (!_headerCanDrag) return;
+
+            if (e.LeftButton != MouseButtonState.Pressed)
+            {
+                _headerCanDrag = false;
+                ReleaseHeaderCapture();
+                return;
+            }
 
             var p = e.GetPosition(this);
-            if (Math.Abs(p.X - _headerDown.X) < 8 && Math.Abs(p.Y - _headerDown.Y) < 8) return;
+            if (Math.Abs(p.X - _headerDown.X) < 6 && Math.Abs(p.Y - _headerDown.Y) < 6) return;
 
             _headerCanDrag = false;
+
+            // 先交还鼠标捕获，否则 DoDragDrop 拿不到拖放消息
+            ReleaseHeaderCapture();
+
             try
             {
                 var data = new DataObject("SuperExplorer.Panel", this);
-                DragDrop.DoDragDrop(this, data, DragDropEffects.Move);
+                DragDrop.DoDragDrop(HeaderBorder, data, DragDropEffects.Move);
+            }
+            catch { }
+        }
+
+        private void ReleaseHeaderCapture()
+        {
+            try
+            {
+                if (HeaderBorder.IsMouseCaptured) HeaderBorder.ReleaseMouseCapture();
             }
             catch { }
         }

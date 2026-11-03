@@ -18,6 +18,7 @@
               BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
               Padding="8,7" Cursor="Hand"
               MouseLeftButtonDown="Header_MouseLeftButtonDown"
+              MouseLeftButtonUp="Header_MouseLeftButtonUp"
               MouseMove="Header_MouseMove">
         <Grid>
           <Grid.ColumnDefinitions>

@@ -21,6 +21,7 @@
 3. **编译验证通过后，直接把新版本发布到 `dist\`**（用户 2026-10-26 明确授权：自动替换本地部署，出问题从 `历史版本\` 的 zip 回退）。做法：
    `dotnet publish -c Release` → 把 publish 目录里的 `SuperExplorer.exe` 与 5 个 native dll 拷进 `dist\` 覆盖。
    **`dist\data\`、`dist\logs\` 是用户数据，绝不覆盖或删除**；覆盖前先确认 `SuperExplorer.exe` 没在运行（占用时替换会失败）。
+   程序正在运行又不能打断时：把 `dist\SuperExplorer.exe` 改名为 `.old`（运行中的进程会继续用改名后的文件），再拷新 exe 进去，用户下次启动即新版；`.old` 等进程退出后再删。
 4. 提交并推送（push 失败按上面的重试策略）
 5. 运行 `powershell -ExecutionPolicy Bypass -File tools\release.ps1`
    它会自动：dotnet publish → 打 zip（落进 `历史版本\`，只保留最近 3 个）→ 创建/更新对应 tag 的 GitHub Release → 上传附件（已存在的 Release 会更新说明并替换同名附件）。GitHub 凭据自动取自 Windows 凭据管理器，无需配置。

@@ -171,6 +171,15 @@ namespace SuperExplorer.Controls
 
         private void Bd_DragOver(object sender, DragEventArgs e)
         {
+            // 面板换位（SuperExplorer.Panel）要冒泡给 FolderPanel 处理：
+            // 卡片铺满整个面板，这里一旦标记 Handled 并给出 None，
+            // 指针落在任何一张卡片上时换位就被判成"禁止放置"，表现就是拖了没反应。
+            if (e.Data != null && e.Data.GetDataPresent("SuperExplorer.Panel"))
+            {
+                SetDropHighlight(false);
+                return;
+            }
+
             if (CanAcceptTileDrop(e.Data))
             {
                 SetDropHighlight(true);
@@ -194,6 +203,10 @@ namespace SuperExplorer.Controls
         private void Bd_Drop(object sender, DragEventArgs e)
         {
             SetDropHighlight(false);
+
+            // 面板换位不是这里的活，不拦，继续冒泡给 FolderPanel
+            if (e.Data != null && e.Data.GetDataPresent("SuperExplorer.Panel")) return;
+
             if (!CanAcceptTileDrop(e.Data)) return;
 
             RaiseEvent(new TileDropEventArgs(FolderDropRequestedEvent, this, e.Data, e.KeyStates));
