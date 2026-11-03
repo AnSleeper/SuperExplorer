@@ -17,9 +17,9 @@
       <Border x:Name="HeaderBorder" Grid.Row="0" Background="Transparent"
               BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
               Padding="8,7" Cursor="Hand"
-              MouseLeftButtonDown="Header_MouseLeftButtonDown"
-              MouseLeftButtonUp="Header_MouseLeftButtonUp"
-              MouseMove="Header_MouseMove">
+              PreviewMouseLeftButtonDown="Header_MouseLeftButtonDown"
+              PreviewMouseLeftButtonUp="Header_MouseLeftButtonUp"
+              PreviewMouseMove="Header_MouseMove">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -53,10 +53,6 @@
               IsHitTestVisible="False" CornerRadius="9" Margin="1"
               Background="{DynamicResource AccentSoftBrush}"
               BorderBrush="{DynamicResource AccentBrush}" BorderThickness="2"/>
-
-      <Border x:Name="InsertMark" Width="3" Visibility="Collapsed"
-              HorizontalAlignment="Left" Margin="1,6,0,6" CornerRadius="2"
-              Background="{DynamicResource AccentBrush}" IsHitTestVisible="False"/>
     </Grid>
   </Border>
 </UserControl>

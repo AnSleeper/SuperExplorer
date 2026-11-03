@@ -449,7 +449,7 @@ namespace SuperExplorer
             panel.FilesDropped += (p, entries, copy) => { _ = TransferAsync(entries, p.FolderPath, copy); };
             panel.FilesDroppedInto += (p, dir, entries, copy) => { _ = TransferAsync(entries, dir, copy); };
             panel.ExternalFolderDropped += (p, dirs) => HandleExternalFolderDrop(dirs);
-            panel.PanelDropped += ReorderPanels;
+            panel.PanelDropped += SwapPanels;
             panel.Notified += Toast;
             panel.FavoriteToggled += p =>
             {
@@ -529,21 +529,34 @@ namespace SuperExplorer
                 p.IsActive = ReferenceEquals(p, panel);
         }
 
-        private void ReorderPanels(FolderPanel target, FolderPanel dragged, bool after)
+        /// <summary>
+        /// 两块面板对调位置。用「交换」而不是「插入到目标左/右」：
+        /// 插入语义在相邻位置算出来的插入点常常就是原位（顺序不变），
+        /// 用户看到的现象就是"拖了没反应"。
+        /// </summary>
+        private void SwapPanels(FolderPanel target, FolderPanel dragged)
         {
-            int from = _panels.IndexOf(dragged);
-            int ti = _panels.IndexOf(target);
-            if (from < 0 || ti < 0 || from == ti) return;
+            int a = _panels.IndexOf(target);
+            int b = _panels.IndexOf(dragged);
+            DebugLog.Write("SWAP", "target=" + a + " dragged=" + b);
+            if (a < 0 || b < 0 || a == b) return;
 
-            _panels.RemoveAt(from);
-            if (from < ti) ti--;
-            int insert = after ? ti + 1 : ti;
-            if (insert < 0) insert = 0;
-            if (insert > _panels.Count) insert = _panels.Count;
-            _panels.Insert(insert, dragged);
+            _panels[a] = dragged;
+            _panels[b] = target;
 
             BuildWorkspace();
             SaveOpenFolders();
+            Toast("已交换：" + PanelName(dragged) + " ↔ " + PanelName(target));
+        }
+
+        private static string PanelName(FolderPanel p)
+        {
+            try
+            {
+                var n = Path.GetFileName((p.FolderPath ?? "").TrimEnd('\\'));
+                return string.IsNullOrEmpty(n) ? p.FolderPath : n;
+            }
+            catch { return p.FolderPath; }
         }
 
         private void SaveOpenFolders()
@@ -1475,7 +1488,13 @@ namespace SuperExplorer
         private void Workspace_Drop(object sender, DragEventArgs e)
         {
             var dirs = GetExternalFolders(e.Data);
-            if (dirs.Count == 0) return;
+            if (dirs.Count == 0)
+            {
+                // 拖面板时落到工作区空白处/面板间隙，这里会静默丢弃，记一笔便于定位
+                if (e.Data.GetDataPresent("SuperExplorer.Panel"))
+                    DebugLog.Write("WORKSPACE", "面板拖放落在空白或间隙，未处理");
+                return;
+            }
 
             // 空工作区直接打开；已有面板则与拖到面板上一样走询问/默认动作
             if (_panels.Count == 0) OpenDroppedFolders(dirs);

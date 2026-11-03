@@ -41,7 +41,7 @@ namespace SuperExplorer.Controls
         public event Action<FolderPanel, string, List<FileEntry>, bool> FilesDroppedInto;
         public event Action<FolderPanel, List<string>> ExternalFolderDropped;
         public event Action<FolderPanel> FavoriteToggled;
-        public event Action<FolderPanel, FolderPanel, bool> PanelDropped;
+        public event Action<FolderPanel, FolderPanel> PanelDropped;
         public event Action<string> Notified;
 
         private int _loadToken;
@@ -622,6 +622,8 @@ namespace SuperExplorer.Controls
             // 按下就把鼠标抓在标题栏上：标题栏只有 28px 高，不抓握时指针稍微
             // 往下移一点就离开元素，MouseMove 断流，阈值永远到不了，拖动起不来
             try { HeaderBorder.CaptureMouse(); } catch { }
+
+            DebugLog.Write("HEADER", "down " + ShortName() + " src=" + e.OriginalSource);
         }
 
         private void Header_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -652,9 +654,20 @@ namespace SuperExplorer.Controls
             try
             {
                 var data = new DataObject("SuperExplorer.Panel", this);
+                DebugLog.Write("HEADER", "drag-start " + ShortName());
                 DragDrop.DoDragDrop(HeaderBorder, data, DragDropEffects.Move);
+                DebugLog.Write("HEADER", "drag-end result=" + DragDropEffects.None);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                DebugLog.Write("HEADER", "drag-ex " + ex.Message);
+            }
+            finally
+            {
+                // OLE 拖放结束后可能留下捕获，清掉免得后续点击失灵
+                try { Mouse.Capture(null); } catch { }
+                _headerCanDrag = false;
+            }
         }
 
         private void ReleaseHeaderCapture()
@@ -664,6 +677,17 @@ namespace SuperExplorer.Controls
                 if (HeaderBorder.IsMouseCaptured) HeaderBorder.ReleaseMouseCapture();
             }
             catch { }
+        }
+
+        /// <summary>日志里用短名标识面板，完整路径太长。</summary>
+        private string ShortName()
+        {
+            try
+            {
+                var n = Path.GetFileName((FolderPath ?? "").TrimEnd('\\'));
+                return string.IsNullOrEmpty(n) ? FolderPath : n;
+            }
+            catch { return FolderPath; }
         }
 
         private static T FindAncestor<T>(DependencyObject d) where T : DependencyObject
@@ -689,14 +713,11 @@ namespace SuperExplorer.Controls
 
             if (e.Data.GetDataPresent("SuperExplorer.Panel"))
             {
-                DropOverlay.Visibility = Visibility.Collapsed;
-                var pos = e.GetPosition(Shell);
-                bool after = pos.X > Shell.ActualWidth / 2;
-                InsertMark.HorizontalAlignment = after ? HorizontalAlignment.Right : HorizontalAlignment.Left;
-                InsertMark.Margin = after
-                    ? new Thickness(0, 6, 1, 6)
-                    : new Thickness(1, 6, 0, 6);
-                InsertMark.Visibility = Visibility.Visible;
+                // 交换语义：整块面板高亮 = 松手就和它换位置（不再分左右插入）
+                if (DropOverlay.Visibility != Visibility.Visible)
+                    DebugLog.Write("DRAGOVER", "target=" + ShortName());
+
+                DropOverlay.Visibility = Visibility.Visible;
                 e.Effects = DragDropEffects.Move;
                 e.Handled = true;
                 return;
@@ -704,7 +725,6 @@ namespace SuperExplorer.Controls
 
             if (CanAcceptFiles(e.Data))
             {
-                InsertMark.Visibility = Visibility.Collapsed;
                 DropOverlay.Visibility = Visibility.Visible;
                 e.Effects = (e.KeyStates & DragDropKeyStates.ControlKey) != 0
                     ? DragDropEffects.Copy
@@ -720,22 +740,23 @@ namespace SuperExplorer.Controls
         {
             if (Shell.IsMouseOver) return;
             DropOverlay.Visibility = Visibility.Collapsed;
-            InsertMark.Visibility = Visibility.Collapsed;
         }
 
         private void Shell_Drop(object sender, DragEventArgs e)
         {
             DropOverlay.Visibility = Visibility.Collapsed;
-            InsertMark.Visibility = Visibility.Collapsed;
 
             if (e.Data.GetDataPresent("SuperExplorer.Panel"))
             {
                 var dragged = e.Data.GetData("SuperExplorer.Panel") as FolderPanel;
                 if (dragged != null && dragged != this)
                 {
-                    var pos = e.GetPosition(Shell);
-                    bool after = pos.X > Shell.ActualWidth / 2;
-                    PanelDropped?.Invoke(this, dragged, after);
+                    DebugLog.Write("DROP", "target=" + ShortName() + " dragged=" + dragged.ShortName());
+                    PanelDropped?.Invoke(this, dragged);
+                }
+                else
+                {
+                    DebugLog.Write("DROP", "target=" + ShortName() + " 落在自己身上，忽略");
                 }
                 e.Handled = true;
                 return;
