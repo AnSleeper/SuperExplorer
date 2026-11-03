@@ -538,7 +538,6 @@ namespace SuperExplorer
         {
             int a = _panels.IndexOf(target);
             int b = _panels.IndexOf(dragged);
-            DebugLog.Write("SWAP", "target=" + a + " dragged=" + b);
             if (a < 0 || b < 0 || a == b) return;
 
             _panels[a] = dragged;
@@ -1488,13 +1487,7 @@ namespace SuperExplorer
         private void Workspace_Drop(object sender, DragEventArgs e)
         {
             var dirs = GetExternalFolders(e.Data);
-            if (dirs.Count == 0)
-            {
-                // 拖面板时落到工作区空白处/面板间隙，这里会静默丢弃，记一笔便于定位
-                if (e.Data.GetDataPresent("SuperExplorer.Panel"))
-                    DebugLog.Write("WORKSPACE", "面板拖放落在空白或间隙，未处理");
-                return;
-            }
+            if (dirs.Count == 0) return;
 
             // 空工作区直接打开；已有面板则与拖到面板上一样走询问/默认动作
             if (_panels.Count == 0) OpenDroppedFolders(dirs);

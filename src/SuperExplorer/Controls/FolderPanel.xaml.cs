@@ -622,8 +622,6 @@ namespace SuperExplorer.Controls
             // 按下就把鼠标抓在标题栏上：标题栏只有 28px 高，不抓握时指针稍微
             // 往下移一点就离开元素，MouseMove 断流，阈值永远到不了，拖动起不来
             try { HeaderBorder.CaptureMouse(); } catch { }
-
-            DebugLog.Write("HEADER", "down " + ShortName() + " src=" + e.OriginalSource);
         }
 
         private void Header_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -654,14 +652,9 @@ namespace SuperExplorer.Controls
             try
             {
                 var data = new DataObject("SuperExplorer.Panel", this);
-                DebugLog.Write("HEADER", "drag-start " + ShortName());
                 DragDrop.DoDragDrop(HeaderBorder, data, DragDropEffects.Move);
-                DebugLog.Write("HEADER", "drag-end result=" + DragDropEffects.None);
             }
-            catch (Exception ex)
-            {
-                DebugLog.Write("HEADER", "drag-ex " + ex.Message);
-            }
+            catch { }
             finally
             {
                 // OLE 拖放结束后可能留下捕获，清掉免得后续点击失灵
@@ -677,17 +670,6 @@ namespace SuperExplorer.Controls
                 if (HeaderBorder.IsMouseCaptured) HeaderBorder.ReleaseMouseCapture();
             }
             catch { }
-        }
-
-        /// <summary>日志里用短名标识面板，完整路径太长。</summary>
-        private string ShortName()
-        {
-            try
-            {
-                var n = Path.GetFileName((FolderPath ?? "").TrimEnd('\\'));
-                return string.IsNullOrEmpty(n) ? FolderPath : n;
-            }
-            catch { return FolderPath; }
         }
 
         private static T FindAncestor<T>(DependencyObject d) where T : DependencyObject
@@ -714,9 +696,6 @@ namespace SuperExplorer.Controls
             if (e.Data.GetDataPresent("SuperExplorer.Panel"))
             {
                 // 交换语义：整块面板高亮 = 松手就和它换位置（不再分左右插入）
-                if (DropOverlay.Visibility != Visibility.Visible)
-                    DebugLog.Write("DRAGOVER", "target=" + ShortName());
-
                 DropOverlay.Visibility = Visibility.Visible;
                 e.Effects = DragDropEffects.Move;
                 e.Handled = true;
@@ -751,12 +730,7 @@ namespace SuperExplorer.Controls
                 var dragged = e.Data.GetData("SuperExplorer.Panel") as FolderPanel;
                 if (dragged != null && dragged != this)
                 {
-                    DebugLog.Write("DROP", "target=" + ShortName() + " dragged=" + dragged.ShortName());
                     PanelDropped?.Invoke(this, dragged);
-                }
-                else
-                {
-                    DebugLog.Write("DROP", "target=" + ShortName() + " 落在自己身上，忽略");
                 }
                 e.Handled = true;
                 return;
